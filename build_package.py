@@ -16,7 +16,7 @@ class PackageBuilder:
         self.project_dir = Path(__file__).parent
         self.build_dir = self.project_dir / "build"
         self.output_dir = self.project_dir / "output"
-        self.version = "2.0.0"
+        self.version = "2.1.0"
         self.app_name = "B站音频提取器"
 
     def check_dependencies(self):
@@ -66,13 +66,13 @@ class PackageBuilder:
     def create_youget_bundle(self):
         print("\n创建you-get捆绑包...")
         youget_dir = self.build_dir / "you-get"
-        youget_dir.mkdir(exist_ok=True)
+        youget_dir.mkdir(exist_ok=True)  # 创建输出目录
 
         try:
             import you_get
-            youget_path = Path(you_get.__file__).parent
+            youget_path = Path(you_get.__file__).parent  # 获取you-get安装路径
 
-            for item in youget_path.rglob('*'):
+            for item in youget_path.rglob('*'):  # 遍历you-get所有文件
                 if item.is_file():
                     relative_path = item.relative_to(youget_path)
                     target_path = youget_dir / relative_path
@@ -207,7 +207,7 @@ A: 在设置的输出目录中，文件名基于视频标题
 
         with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for file_path in self.build_dir.rglob('*'):
-                if file_path.is_file():
+                if file_path.is_file() and 'temp' not in file_path.parts:
                     arcname = file_path.relative_to(self.build_dir)
                     zipf.write(file_path, arcname)
 
