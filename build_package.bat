@@ -1,4 +1,5 @@
 @echo off
+
 echo =========================================
 echo Bilibili Audio Extractor - Build Script
 echo =========================================
@@ -17,7 +18,7 @@ echo [OK] Python is installed
 
 echo.
 echo Checking PyInstaller...
-python -c "import PyInstaller"
+python -c "import PyInstaller" >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] PyInstaller not found, installing...
     pip install pyinstaller
@@ -32,7 +33,7 @@ echo [OK] PyInstaller is ready
 
 echo.
 echo Checking you-get...
-python -c "import you_get"
+python -c "import you_get" >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] you-get not found, installing...
     pip install you-get
@@ -71,7 +72,7 @@ if exist "output" (
     echo.
     echo To use:
     echo 1. Extract ZIP file
-    echo 2. Run "启动程序.bat"
+    echo 2. Run "start.bat"
     echo 3. Download FFmpeg from: https://www.gyan.dev/ffmpeg/builds/
 )
 
