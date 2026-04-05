@@ -42,10 +42,17 @@ class BilibiliAudioExtractorGUI:
         # 文件保留选项
         self.keep_video_var = tk.BooleanVar(value=False)  # 默认不保留视频文件
 
-        # 加载配置
-        self.load_config()
+        # 大会员登录相关
+        self.use_login_var = tk.BooleanVar(value=False)
+        self.cookie_file_var = tk.StringVar()
+        self.username_var = tk.StringVar()
+        self.password_var = tk.StringVar()
 
         self.setup_ui()
+
+        # 加载配置 (需要在UI设置完成后进行)
+        self.load_config()
+
         self.check_dependencies()
 
     def setup_ui(self):
@@ -156,8 +163,10 @@ class BilibiliAudioExtractorGUI:
         self.quality_var = tk.StringVar(value="original")
         quality_options = [
             ("原始质量 (FLAC无损)", "original"),
+            ("Hi-Res音质 (FLAC, 96kHz, 24bit)", "hires"),
             ("CD音质 (FLAC, 44.1kHz, 16bit)", "cd"),
-            ("MP3音质 (MP3, 128kbps)", "mp3")
+            ("高音质MP3 (MP3, 320kbps)", "mp3_high"),
+            ("标准MP3 (MP3, 128kbps)", "mp3")
         ]
 
         for text, value in quality_options:
@@ -190,6 +199,50 @@ class BilibiliAudioExtractorGUI:
             fg="gray",
             anchor="w",
             font=('Arial', 9)
+        ).pack(fill=tk.X)
+
+        # 大会员登录设置
+        login_frame = tk.LabelFrame(scrollable_frame, text="大会员登录 (获取更高音质)", padx=10, pady=10)
+        login_frame.pack(fill=tk.X, pady=(0, 10))
+
+        use_login_cb = tk.Checkbutton(
+            login_frame,
+            text="启用大会员登录 (获取最高音质)",
+            variable=self.use_login_var,
+            anchor="w",
+            command=self.toggle_login_fields
+        )
+        use_login_cb.pack(fill=tk.X, pady=(0, 10))
+
+        # Cookie文件选择
+        cookie_frame = tk.Frame(login_frame)
+        cookie_frame.pack(fill=tk.X, pady=(0, 5))
+
+        tk.Label(cookie_frame, text="Cookie文件:", anchor="w").pack(fill=tk.X, pady=(0, 2))
+        cookie_entry_frame = tk.Frame(cookie_frame)
+        cookie_entry_frame.pack(fill=tk.X)
+
+        self.cookie_entry = tk.Entry(cookie_entry_frame, textvariable=self.cookie_file_var, font=('Arial', 10))
+        self.cookie_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.cookie_entry.config(state=tk.DISABLED)  # 初始禁用
+
+        cookie_browse_btn = tk.Button(
+            cookie_entry_frame,
+            text="浏览",
+            command=self.browse_cookie_file,
+            width=8,
+            bg='#2196F3',
+            fg='white'
+        )
+        cookie_browse_btn.pack(side=tk.RIGHT)
+
+        tk.Label(
+            login_frame,
+            text="提示: 使用Chrome插件'Get cookies.txt'导出B站cookie文件，可获得大会员最高音质",
+            fg="gray",
+            anchor="w",
+            font=('Arial', 9),
+            wraplength=600
         ).pack(fill=tk.X)
 
         # 进度条
@@ -299,6 +352,26 @@ class BilibiliAudioExtractorGUI:
             # 保存配置
             self.save_config('output_dir', directory)
 
+    def browse_cookie_file(self):
+        """选择Cookie文件"""
+        cookie_file = filedialog.askopenfilename(
+            title="选择Cookie文件",
+            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")],
+            initialdir=str(Path.home())
+        )
+        if cookie_file:
+            self.cookie_file_var.set(cookie_file)
+            self.save_config('cookie_file', cookie_file)
+
+    def toggle_login_fields(self):
+        """切换登录相关控件的启用状态"""
+        if self.use_login_var.get():
+            self.cookie_entry.config(state=tk.NORMAL)
+        else:
+            self.cookie_entry.config(state=tk.DISABLED)
+        # 保存登录设置
+        self.save_login_settings()
+
     def validate_url(self, url):
         """验证B站URL格式"""
         patterns = [
@@ -359,6 +432,15 @@ class BilibiliAudioExtractorGUI:
 
         if strategy:
             cmd.extend(['--format', strategy])
+
+        # 如果启用了大会员登录，添加cookie文件
+        if self.use_login_var.get() and self.cookie_file_var.get():
+            cookie_file = self.cookie_file_var.get()
+            if Path(cookie_file).exists():
+                cmd.extend(['--cookies', cookie_file])
+                self.log_message("✓ 使用Cookie文件进行下载 (大会员音质)")
+            else:
+                self.log_message("⚠ Cookie文件不存在，跳过登录")
 
         cmd.append(url)
 
@@ -518,6 +600,22 @@ class BilibiliAudioExtractorGUI:
                     str(output_file)
                 ]
                 quality_desc = "原始质量 (FLAC无损)"
+            elif quality_choice == "hires":
+                # Hi-Res音质 (FLAC, 96kHz, 24bit)
+                output_file = output_path / f"{file_stem}_HiRes音质.flac"
+                cmd = [
+                    'ffmpeg',
+                    '-i', str(video_path),
+                    '-vn',
+                    '-c:a', 'flac',
+                    '-compression_level', '12',
+                    '-ar', '96000',
+                    '-sample_fmt', 's32',
+                    '-b:a', '1536k',
+                    '-y',
+                    str(output_file)
+                ]
+                quality_desc = "Hi-Res音质 (FLAC, 96kHz, 24bit)"
             elif quality_choice == "cd":
                 # CD音质 (FLAC, 44.1kHz, 16bit)
                 output_file = output_path / f"{file_stem}_CD音质.flac"
@@ -533,15 +631,29 @@ class BilibiliAudioExtractorGUI:
                     str(output_file)
                 ]
                 quality_desc = "CD音质 (FLAC, 44.1kHz, 16bit)"
+            elif quality_choice == "mp3_high":
+                # 高音质MP3 (MP3, 320kbps)
+                output_file = output_path / f"{file_stem}_高音质MP3.mp3"
+                cmd = [
+                    'ffmpeg',
+                    '-i', str(video_path),
+                    '-vn',
+                    '-c:a', 'libmp3lame',
+                    '-b:a', '320k',  # 320kbps，高音质
+                    '-ar', '48000',
+                    '-y',
+                    str(output_file)
+                ]
+                quality_desc = "高音质MP3 (MP3, 320kbps)"
             else:  # mp3
-                # MP3音质 (MP3, 128kbps, 能听就可以)
+                # MP3音质 (MP3, 128kbps)
                 output_file = output_path / f"{file_stem}_MP3音质.mp3"
                 cmd = [
                     'ffmpeg',
                     '-i', str(video_path),
                     '-vn',
                     '-c:a', 'libmp3lame',
-                    '-b:a', '128k',  # 128kbps，能听就可以
+                    '-b:a', '128k',  # 128kbps
                     '-ar', '44100',
                     '-y',
                     str(output_file)
@@ -665,6 +777,12 @@ class BilibiliAudioExtractorGUI:
                     # 恢复音频质量选择
                     if 'audio_quality' in config:
                         self.quality_var.set(config['audio_quality'])
+
+                    # 恢复登录设置
+                    if 'use_login' in config:
+                        self.use_login_var.set(config['use_login'])
+                    if 'cookie_file' in config:
+                        self.cookie_file_var.set(config['cookie_file'])
         except Exception as e:
             print(f"加载配置失败: {e}")
 
@@ -693,6 +811,11 @@ class BilibiliAudioExtractorGUI:
     def save_quality_settings(self):
         """保存音频质量选择"""
         self.save_config('audio_quality', self.quality_var.get())
+
+    def save_login_settings(self):
+        """保存登录设置"""
+        self.save_config('use_login', self.use_login_var.get())
+        self.save_config('cookie_file', self.cookie_file_var.get())
 
     def get_config(self, key, default=None):
         """获取配置项"""

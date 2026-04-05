@@ -51,6 +51,13 @@ class BilibiliAudioExtractor:
         except (subprocess.CalledProcessError, FileNotFoundError):
             missing_deps.append('you-get')
 
+        # 检查ffprobe
+        try:
+            subprocess.run(['ffprobe', '-version'],
+                         capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            missing_deps.append('ffprobe (FFmpeg组件)')
+
         if missing_deps:
             return False, f"缺少依赖: {', '.join(missing_deps)}"
         return True, "所有依赖已安装"
@@ -70,10 +77,10 @@ class BilibiliAudioExtractor:
         logger.info(f"开始下载视频: {url}")
 
         try:
-            # 构建you-get命令
+            # 构建you-get命令 - 尝试获取最高质量格式
             cmd = [
                 'you-get',
-                '--format=flv',  # 选择高质量格式
+                '--format=hd2',  # 优先尝试1080p格式
                 '--output-dir', str(self.temp_dir),
                 url
             ]
@@ -113,15 +120,16 @@ class BilibiliAudioExtractor:
             else:
                 output_file = self.output_dir / f"{video_path.stem}.flac"
 
-            # 构建FFmpeg命令
+            # 构建FFmpeg命令 - 优先保持原始音频质量
             cmd = [
                 'ffmpeg',
                 '-i', str(video_path),
                 '-vn',  # 不复制视频
                 '-c:a', 'flac',  # FLAC编码
                 '-compression_level', '12',  # 最高压缩级别
-                '-ar', '48000',  # 采样率48kHz
+                '-ar', '96000',  # 尝试96kHz采样率
                 '-sample_fmt', 's32',  # 32位采样
+                '-b:a', '1536k',  # 高比特率
                 '-y',  # 覆盖输出文件
                 str(output_file)
             ]
@@ -159,6 +167,30 @@ class BilibiliAudioExtractor:
             logger.warning(f"获取视频信息失败: {e}")
             return {}
 
+    def check_audio_streams(self, video_path: Path) -> dict:
+        """检查视频文件中的音频流信息"""
+        try:
+            cmd = [
+                'ffprobe',
+                '-v', 'quiet',
+                '-print_format', 'json',
+                '-show_streams',
+                '-select_streams', 'a',
+                str(video_path)
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode == 0:
+                info = json.loads(result.stdout)
+                if 'streams' in info and len(info['streams']) > 0:
+                    audio_stream = info['streams'][0]
+                    logger.info(f"音频流信息: {audio_stream}")
+                    return audio_stream
+            return {}
+        except Exception as e:
+            logger.warning(f"检查音频流信息失败: {e}")
+            return {}
+
     def process_url(self, url: str) -> Tuple[bool, str]:
         """处理单个B站URL"""
         logger.info(f"处理URL: {url}")
@@ -177,6 +209,13 @@ class BilibiliAudioExtractor:
         video_path = self.download_video(url)
         if not video_path:
             return False, "视频下载失败"
+
+        # 检查音频流质量
+        audio_info = self.check_audio_streams(video_path)
+        if audio_info:
+            sample_rate = audio_info.get('sample_rate', '44100')
+            channels = audio_info.get('channels', 2)
+            logger.info(f"源音频 - 采样率: {sample_rate}Hz, 声道: {channels}")
 
         # 提取音频
         flac_path = self.extract_audio_to_flac(video_path, title)
