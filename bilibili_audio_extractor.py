@@ -12,7 +12,7 @@ import subprocess
 import re
 import argparse
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 import logging
 
 # 配置日志
@@ -72,18 +72,20 @@ class BilibiliAudioExtractor:
 
         return any(re.match(pattern, url) for pattern in patterns)
 
-    def download_video(self, url: str) -> Optional[Path]:
+    def download_video(self, url: str, format_choice: str = None) -> Optional[Path]:
         """使用you-get下载视频"""
         logger.info(f"开始下载视频: {url}")
 
         try:
-            # 构建you-get命令 - 尝试获取最高质量格式
-            cmd = [
-                'you-get',
-                '--format=hd2',  # 优先尝试1080p格式
-                '--output-dir', str(self.temp_dir),
-                url
-            ]
+            # 构建you-get命令
+            cmd = ['you-get', '--output-dir', str(self.temp_dir)]
+
+            # 添加格式选择
+            if format_choice:
+                cmd.extend(['--format', format_choice])
+                logger.info(f"使用指定格式: {format_choice}")
+
+            cmd.append(url)
 
             result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -107,32 +109,207 @@ class BilibiliAudioExtractor:
             logger.error(f"下载过程出错: {e}")
             return None
 
+    def get_available_audio_formats(self, url: str) -> List[Dict]:
+        """获取视频可用的音频格式"""
+        logger.info(f"检测可用音频格式: {url}")
+
+        formats = []
+        seen_descriptions = set()  # 用于去重
+
+        # 使用you-get获取视频信息
+        try:
+            cmd = ['you-get', '--json', url]
+            result = subprocess.run(cmd, capture_output=True, text=False)
+
+            if result.returncode == 0 and result.stdout:
+                try:
+                    # 尝试解码输出
+                    try:
+                        stdout_text = result.stdout.decode('utf-8')
+                    except UnicodeDecodeError:
+                        stdout_text = result.stdout.decode('gbk', errors='ignore')
+
+                    video_info = json.loads(stdout_text)
+
+                    # 从视频信息中提取可用的格式
+                    if 'streams' in video_info:
+                        streams = video_info['streams']
+
+                        if isinstance(streams, dict):
+                            # streams是字典结构，键是格式名称，值是流信息
+                            for stream_key, stream_info in streams.items():
+                                if isinstance(stream_info, dict):
+                                    quality = stream_info.get('quality', '')
+                                    container = stream_info.get('container', '')
+                                    size = stream_info.get('size', 'unknown')
+
+                                    if quality and container:
+                                        # 解析质量信息，提取分辨率
+                                        resolution = ''
+
+                                        # 从quality字段提取分辨率
+                                        if '1080' in quality or '1080' in stream_key:
+                                            resolution = '1080p'
+                                        elif '720' in quality or '720' in stream_key:
+                                            resolution = '720p'
+                                        elif '480' in quality or '480' in stream_key:
+                                            resolution = '480p'
+                                        elif '360' in quality or '360' in stream_key:
+                                            resolution = '360p'
+                                        elif 'hd' in stream_key.lower():
+                                            resolution = '高清'
+
+                                        # 创建描述（只显示分辨率）
+                                        if resolution:
+                                            description = f"{resolution} ({container})"
+                                        else:
+                                            description = f"{quality} ({container})"
+
+                                        # 生成对应的you-get格式参数
+                                        # 优先使用分辨率作为参数
+                                        if 'flv' in stream_key.lower():
+                                            format_param = 'flv'
+                                        elif resolution == '1080p':
+                                            format_param = 'hd2'
+                                        elif resolution == '720p':
+                                            format_param = 'hd1'
+                                        elif resolution == '360p':
+                                            format_param = '360p'
+                                        elif resolution == '480p':
+                                            format_param = '480p'
+                                        else:
+                                            format_param = resolution or 'mp4'
+
+                                        # 去重：如果已经有相同描述的格式，跳过
+                                        if description not in seen_descriptions:
+                                            seen_descriptions.add(description)
+                                            formats.append({
+                                                'quality': format_param,
+                                                'container': container,
+                                                'size': size,
+                                                'description': description,
+                                                'original_key': stream_key
+                                            })
+                        elif isinstance(streams, list):
+                            # streams是列表结构（旧版本格式）
+                            for stream in streams:
+                                if isinstance(stream, dict) and stream.get('quality') and stream.get('container'):
+                                    description = f"{stream['quality']} ({stream['container']})"
+
+                                    # 去重：如果已经有相同描述的格式，跳过
+                                    if description not in seen_descriptions:
+                                        seen_descriptions.add(description)
+                                        formats.append({
+                                            'quality': stream['quality'],
+                                            'container': stream['container'],
+                                            'size': stream.get('size', 'unknown'),
+                                            'description': description,
+                                            'original_key': stream.get('quality', '')
+                                        })
+
+                    logger.info(f"成功检测到 {len(formats)} 个格式")
+
+                except Exception as e:
+                    logger.warning(f"解析视频信息失败: {e}")
+
+            # 如果没有找到具体格式信息，提供默认选项
+            if not formats:
+                logger.info("使用默认格式选项")
+                formats = [
+                    {'quality': 'hd2', 'container': 'mp4', 'description': '1080p (MP4, 高质量)', 'original_key': 'hd2'},
+                    {'quality': 'hd1', 'container': 'mp4', 'description': '720p (MP4, 标准质量)', 'original_key': 'hd1'},
+                    {'quality': 'flv', 'container': 'flv', 'description': 'FLV格式 (高质量)', 'original_key': 'flv'},
+                    {'quality': '360p', 'container': 'mp4', 'description': '360p (低质量，免登录)', 'original_key': '360p'}
+                ]
+
+        except Exception as e:
+            logger.warning(f"获取格式信息失败: {e}，使用默认选项")
+            formats = [
+                {'quality': 'hd2', 'container': 'mp4', 'description': '1080p (MP4, 高质量)', 'original_key': 'hd2'},
+                {'quality': 'hd1', 'container': 'mp4', 'description': '720p (MP4, 标准质量)', 'original_key': 'hd1'},
+                {'quality': 'flv', 'container': 'flv', 'description': 'FLV格式 (高质量)', 'original_key': 'flv'},
+                {'quality': '360p', 'container': 'mp4', 'description': '360p (低质量，免登录)', 'original_key': '360p'}
+            ]
+
+        return formats
+
     def extract_audio_to_flac(self, video_path: Path,
-                            title: str = None) -> Optional[Path]:
-        """提取音频并转换为FLAC格式"""
+                            title: str = None,
+                            quality_choice: str = "original") -> Optional[Path]:
+        """提取音频并转换为指定质量的音频格式"""
         logger.info(f"开始提取音频: {video_path}")
 
         try:
             # 生成输出文件名
             if title:
                 safe_title = re.sub(r'[<>:"/\\|?*]', '_', title)
-                output_file = self.output_dir / f"{safe_title}.flac"
+                suffix = self._get_quality_suffix(quality_choice)
+                output_file = self.output_dir / f"{safe_title}_{suffix}.flac"
             else:
-                output_file = self.output_dir / f"{video_path.stem}.flac"
+                suffix = self._get_quality_suffix(quality_choice)
+                output_file = self.output_dir / f"{video_path.stem}_{suffix}.flac"
 
-            # 构建FFmpeg命令 - 优先保持原始音频质量
-            cmd = [
-                'ffmpeg',
-                '-i', str(video_path),
-                '-vn',  # 不复制视频
-                '-c:a', 'flac',  # FLAC编码
-                '-compression_level', '12',  # 最高压缩级别
-                '-ar', '96000',  # 尝试96kHz采样率
-                '-sample_fmt', 's32',  # 32位采样
-                '-b:a', '1536k',  # 高比特率
-                '-y',  # 覆盖输出文件
-                str(output_file)
-            ]
+            # 根据用户选择设置音频参数
+            cmd = ['ffmpeg', '-i', str(video_path), '-vn']
+
+            if quality_choice == "original":
+                # 保持原始质量 (FLAC无损)
+                cmd.extend([
+                    '-c:a', 'flac',
+                    '-compression_level', '12',
+                    '-y'
+                ])
+                logger.info("使用原始质量 (FLAC无损)")
+            elif quality_choice == "hires":
+                # Hi-Res音质 (FLAC, 96kHz, 24bit)
+                cmd.extend([
+                    '-c:a', 'flac',
+                    '-compression_level', '12',
+                    '-ar', '96000',
+                    '-sample_fmt', 's32',
+                    '-b:a', '1536k',
+                    '-y'
+                ])
+                logger.info("使用Hi-Res音质 (FLAC, 96kHz, 24bit)")
+            elif quality_choice == "cd":
+                # CD音质 (FLAC, 44.1kHz, 16bit)
+                cmd.extend([
+                    '-c:a', 'flac',
+                    '-compression_level', '12',
+                    '-ar', '44100',
+                    '-sample_fmt', 's16',
+                    '-b:a', '1411k',
+                    '-y'
+                ])
+                logger.info("使用CD音质 (FLAC, 44.1kHz, 16bit)")
+            elif quality_choice == "mp3_high":
+                # 高音质MP3 (MP3, 320kbps)
+                output_file = output_file.with_suffix('.mp3')
+                cmd.extend([
+                    '-c:a', 'libmp3lame',
+                    '-b:a', '320k',
+                    '-y'
+                ])
+                logger.info("使用高音质MP3 (MP3, 320kbps)")
+            elif quality_choice == "mp3_standard":
+                # 标准MP3音质 (MP3, 128kbps)
+                output_file = output_file.with_suffix('.mp3')
+                cmd.extend([
+                    '-c:a', 'libmp3lame',
+                    '-b:a', '128k',
+                    '-y'
+                ])
+                logger.info("使用标准MP3音质 (MP3, 128kbps)")
+            else:
+                # 默认使用原始质量
+                cmd.extend([
+                    '-c:a', 'flac',
+                    '-compression_level', '12',
+                    '-y'
+                ])
+                logger.info("使用默认原始质量 (FLAC无损)")
+
+            cmd.append(str(output_file))
 
             result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -141,16 +318,27 @@ class BilibiliAudioExtractor:
                 return None
 
             if output_file.exists():
-                logger.info(f"FLAC音频文件已创建: {output_file}")
+                logger.info(f"音频文件已创建: {output_file}")
                 logger.info(f"文件大小: {output_file.stat().st_size / (1024*1024):.2f} MB")
                 return output_file
             else:
-                logger.error("FLAC文件未生成")
+                logger.error("音频文件未生成")
                 return None
 
         except Exception as e:
             logger.error(f"音频提取过程出错: {e}")
             return None
+
+    def _get_quality_suffix(self, quality_choice: str) -> str:
+        """获取质量选项对应的后缀"""
+        suffix_map = {
+            "original": "原始质量",
+            "hires": "HiRes音质",
+            "cd": "CD音质",
+            "mp3_high": "高音质MP3",
+            "mp3_standard": "标准MP3"
+        }
+        return suffix_map.get(quality_choice, "音频")
 
     def get_video_info(self, url: str) -> dict:
         """获取视频信息"""
@@ -191,7 +379,7 @@ class BilibiliAudioExtractor:
             logger.warning(f"检查音频流信息失败: {e}")
             return {}
 
-    def process_url(self, url: str) -> Tuple[bool, str]:
+    def process_url(self, url: str, format_choice: str = None, quality_choice: str = None) -> Tuple[bool, str]:
         """处理单个B站URL"""
         logger.info(f"处理URL: {url}")
 
@@ -205,8 +393,61 @@ class BilibiliAudioExtractor:
 
         logger.info(f"视频标题: {title}")
 
+        # 显示可用格式并让用户选择
+        if format_choice is None:
+            available_formats = self.get_available_audio_formats(url)
+            print("\n=== 可下载的音频格式 ===")
+            for i, fmt in enumerate(available_formats, 1):
+                print(f"{i}. {fmt['description']}")
+
+            while True:
+                try:
+                    choice = input(f"\n请选择下载格式 (1-{len(available_formats)}，默认1): ").strip()
+                    if choice == "":
+                        format_choice = available_formats[0]['quality']
+                        break
+                    elif choice.isdigit() and 1 <= int(choice) <= len(available_formats):
+                        format_choice = available_formats[int(choice)-1]['quality']
+                        break
+                    else:
+                        print(f"请输入 1-{len(available_formats)} 之间的数字")
+                except (KeyboardInterrupt, EOFError):
+                    return False, "用户取消操作"
+
+            print(f"已选择格式: {format_choice}")
+
+        # 显示音频质量选项并让用户选择
+        quality_options = [
+            ("original", "原始质量 (FLAC无损)"),
+            ("hires", "Hi-Res音质 (FLAC, 96kHz, 24bit)"),
+            ("cd", "CD音质 (FLAC, 44.1kHz, 16bit)"),
+            ("mp3_high", "高音质MP3 (MP3, 320kbps)"),
+            ("mp3_standard", "标准MP3音质 (MP3, 128kbps)")
+        ]
+
+        if quality_choice is None:
+            print("\n=== 音频输出质量 ===")
+            for i, (key, desc) in enumerate(quality_options, 1):
+                print(f"{i}. {desc}")
+
+            while True:
+                try:
+                    choice = input(f"\n请选择输出质量 (1-{len(quality_options)}，默认1): ").strip()
+                    if choice == "":
+                        quality_choice = quality_options[0][0]
+                        break
+                    elif choice.isdigit() and 1 <= int(choice) <= len(quality_options):
+                        quality_choice = quality_options[int(choice)-1][0]
+                        break
+                    else:
+                        print(f"请输入 1-{len(quality_options)} 之间的数字")
+                except (KeyboardInterrupt, EOFError):
+                    return False, "用户取消操作"
+
+            print(f"已选择质量: {dict(quality_options)[quality_choice]}")
+
         # 下载视频
-        video_path = self.download_video(url)
+        video_path = self.download_video(url, format_choice)
         if not video_path:
             return False, "视频下载失败"
 
@@ -218,7 +459,7 @@ class BilibiliAudioExtractor:
             logger.info(f"源音频 - 采样率: {sample_rate}Hz, 声道: {channels}")
 
         # 提取音频
-        flac_path = self.extract_audio_to_flac(video_path, title)
+        audio_path = self.extract_audio_to_flac(video_path, title, quality_choice)
 
         # 清理临时文件
         try:
@@ -227,8 +468,8 @@ class BilibiliAudioExtractor:
         except Exception as e:
             logger.warning(f"清理临时文件失败: {e}")
 
-        if flac_path:
-            return True, f"音频提取成功: {flac_path}"
+        if audio_path:
+            return True, f"音频提取成功: {audio_path}"
         else:
             return False, "音频提取失败"
 
@@ -246,6 +487,12 @@ def main():
     parser = argparse.ArgumentParser(description='B站音频提取器')
     parser.add_argument('url', nargs='?', help='B站视频链接')
     parser.add_argument('--output', '-o', help='输出目录')
+    parser.add_argument('--format', '-f', help='指定下载格式 (如: hd2, hd1, flv, 360p)')
+    parser.add_argument('--quality', '-q',
+                       choices=['original', 'hires', 'cd', 'mp3_high', 'mp3_standard'],
+                       help='指定输出音频质量')
+    parser.add_argument('--auto', '-a', action='store_true',
+                       help='自动模式，跳过用户交互，使用默认选项')
     parser.add_argument('--cleanup', action='store_true',
                        help='清理临时文件')
 
@@ -262,7 +509,7 @@ def main():
         print("2. you-get: pip install you-get")
         return 1
 
-    print(f"✓ {deps_msg}")
+    print(f"OK: {deps_msg}")
 
     if args.cleanup:
         extractor.cleanup_temp_files()
@@ -270,11 +517,25 @@ def main():
 
     if not args.url:
         print("请输入B站视频链接")
-        print("用法: python bilibili_audio_extractor.py <URL> [--output DIR]")
+        print("用法: python bilibili_audio_extractor.py <URL> [选项]")
+        print("\n选项:")
+        print("  --format, -f FORMAT    指定下载格式 (hd2, hd1, flv, 360p)")
+        print("  --quality, -q QUALITY  指定输出质量 (original, hires, cd, mp3_high, mp3_standard)")
+        print("  --auto, -a             自动模式，跳过用户交互")
+        print("  --output, -o DIR       指定输出目录")
+        print("  --cleanup              清理临时文件")
         return 1
 
     # 处理URL
-    success, message = extractor.process_url(args.url)
+    if args.auto:
+        # 自动模式，使用命令行参数或默认值
+        format_choice = args.format if args.format else 'hd2'
+        quality_choice = args.quality if args.quality else 'original'
+        success, message = extractor.process_url(args.url, format_choice, quality_choice)
+    else:
+        # 交互模式，用户可以覆盖命令行参数
+        success, message = extractor.process_url(args.url, args.format, args.quality)
+
     print(message)
 
     if success:

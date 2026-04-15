@@ -98,6 +98,34 @@ class BilibiliAudioExtractorGUI:
         example_url = "https://www.bilibili.com/video/BV1Hs4y1B7T2"
         tk.Label(url_frame, text=f"示例: {example_url}", fg="gray", anchor="w").pack(fill=tk.X)
 
+        # 格式检测按钮
+        format_detect_frame = tk.LabelFrame(scrollable_frame, text="格式检测", padx=10, pady=10)
+        format_detect_frame.pack(fill=tk.X, pady=(0, 10))
+
+        detect_btn_frame = tk.Frame(format_detect_frame)
+        detect_btn_frame.pack(fill=tk.X, pady=(0, 5))
+
+        self.detect_format_btn = tk.Button(
+            detect_btn_frame,
+            text="检测可用格式",
+            command=self.detect_available_formats,
+            bg='#4CAF50',
+            fg='white',
+            width=15
+        )
+        self.detect_format_btn.pack(side=tk.LEFT)
+
+        # 可用格式显示
+        self.available_formats_var = tk.StringVar(value="点击按钮检测该视频可用的下载格式")
+        self.available_formats_label = tk.Label(
+            format_detect_frame,
+            textvariable=self.available_formats_var,
+            anchor="w",
+            fg="blue",
+            wraplength=600
+        )
+        self.available_formats_label.pack(fill=tk.X, pady=(5, 0))
+
         # 下载策略选择
         strategy_frame = tk.LabelFrame(scrollable_frame, text="下载策略 (解决登录限制)", padx=10, pady=10)
         strategy_frame.pack(fill=tk.X, pady=(0, 10))
@@ -425,6 +453,170 @@ class BilibiliAudioExtractorGUI:
                 self.log_message("没有找到临时文件")
         except Exception as e:
             self.log_message(f"清理失败: {e}")
+
+    def get_available_formats(self, url):
+        """获取视频可用的下载格式"""
+        try:
+            import subprocess
+            import json
+
+            cmd = ['you-get', '--json', url]
+            result = subprocess.run(cmd, capture_output=True, text=False)
+
+            formats = []
+            seen_descriptions = set()  # 用于去重
+            if result.returncode == 0 and result.stdout:
+                try:
+                    # 尝试解码输出
+                    try:
+                        stdout_text = result.stdout.decode('utf-8')
+                    except UnicodeDecodeError:
+                        stdout_text = result.stdout.decode('gbk', errors='ignore')
+
+                    video_info = json.loads(stdout_text)
+
+                    if 'streams' in video_info:
+                        streams = video_info['streams']
+
+                        if isinstance(streams, dict):
+                            # streams是字典结构，键是格式名称，值是流信息
+                            for stream_key, stream_info in streams.items():
+                                if isinstance(stream_info, dict):
+                                    quality = stream_info.get('quality', '')
+                                    container = stream_info.get('container', '')
+                                    size = stream_info.get('size', 'unknown')
+
+                                    if quality and container:
+                                        # 解析质量信息，提取分辨率
+                                        resolution = ''
+
+                                        # 从quality字段提取分辨率
+                                        if '1080' in quality or '1080' in stream_key:
+                                            resolution = '1080p'
+                                        elif '720' in quality or '720' in stream_key:
+                                            resolution = '720p'
+                                        elif '480' in quality or '480' in stream_key:
+                                            resolution = '480p'
+                                        elif '360' in quality or '360' in stream_key:
+                                            resolution = '360p'
+                                        elif 'hd' in stream_key.lower():
+                                            resolution = '高清'
+
+                                        # 创建描述（只显示分辨率，不显示编码）
+                                        if resolution:
+                                            description = f"{resolution} ({container})"
+                                        else:
+                                            description = f"{quality} ({container})"
+
+                                        # 生成对应的you-get格式参数
+                                        # 优先使用分辨率作为参数
+                                        if 'flv' in stream_key.lower():
+                                            format_param = 'flv'
+                                        elif resolution == '1080p':
+                                            format_param = 'hd2'
+                                        elif resolution == '720p':
+                                            format_param = 'hd1'
+                                        elif resolution == '360p':
+                                            format_param = '360p'
+                                        elif resolution == '480p':
+                                            format_param = '480p'
+                                        else:
+                                            format_param = resolution or 'mp4'
+
+                                        # 去重：如果已经有相同描述的格式，跳过
+                                        if description not in seen_descriptions:
+                                            seen_descriptions.add(description)
+                                            formats.append({
+                                                'quality': format_param,
+                                                'container': container,
+                                                'size': size,
+                                                'description': description,
+                                                'original_key': stream_key
+                                            })
+                        elif isinstance(streams, list):
+                            # streams是列表结构（旧版本格式）
+                            for stream in streams:
+                                if isinstance(stream, dict) and stream.get('quality') and stream.get('container'):
+                                    description = f"{stream['quality']} ({stream['container']})"
+
+                                    # 去重：如果已经有相同描述的格式，跳过
+                                    if description not in seen_descriptions:
+                                        seen_descriptions.add(description)
+                                        formats.append({
+                                            'quality': stream['quality'],
+                                            'container': stream['container'],
+                                            'size': stream.get('size', 'unknown'),
+                                            'description': description,
+                                            'original_key': stream.get('quality', '')
+                                        })
+                except Exception as e:
+                    print(f"解析视频信息失败: {e}")
+
+            # 如果没有找到具体格式信息，提供默认选项
+            if not formats:
+                formats = [
+                    {'quality': 'hd2', 'container': 'mp4', 'description': '1080p (MP4, 高质量)', 'original_key': 'hd2'},
+                    {'quality': 'hd1', 'container': 'mp4', 'description': '720p (MP4, 标准质量)', 'original_key': 'hd1'},
+                    {'quality': 'flv', 'container': 'flv', 'description': 'FLV格式 (高质量)', 'original_key': 'flv'},
+                    {'quality': '360p', 'container': 'mp4', 'description': '360p (低质量，免登录)', 'original_key': '360p'}
+                ]
+
+            return formats
+        except Exception as e:
+            # 如果无法获取详细信息，提供默认选项
+            print(f"获取格式信息失败: {e}")
+            return [
+                {'quality': 'hd2', 'container': 'mp4', 'description': '1080p (MP4, 高质量)', 'original_key': 'hd2'},
+                {'quality': 'hd1', 'container': 'mp4', 'description': '720p (MP4, 标准质量)', 'original_key': 'hd1'},
+                {'quality': 'flv', 'container': 'flv', 'description': 'FLV格式 (高质量)', 'original_key': 'flv'},
+                {'quality': '360p', 'container': 'mp4', 'description': '360p (低质量，免登录)', 'original_key': '360p'}
+            ]
+
+    def detect_available_formats(self):
+        """检测并显示可用格式"""
+        url = self.url_var.get().strip()
+        if not url:
+            messagebox.showwarning("警告", "请先输入B站视频链接")
+            return
+
+        if not self.validate_url(url):
+            messagebox.showerror("错误", "无效的B站视频链接")
+            return
+
+        # 在后台线程中执行格式检测
+        self.detect_format_btn.config(state='disabled', text="检测中...")
+        self.available_formats_var.set("正在检测可用格式，请稍候...")
+
+        thread = threading.Thread(target=self._detect_formats_thread, args=(url,), daemon=True)
+        thread.start()
+
+    def _detect_formats_thread(self, url):
+        """在后台线程中检测格式"""
+        try:
+            formats = self.get_available_formats(url)
+
+            # 更新UI
+            self.root.after(0, lambda: self._update_formats_display(formats))
+
+        except Exception as e:
+            self.root.after(0, lambda: self._show_format_error(str(e)))
+
+    def _update_formats_display(self, formats):
+        """更新格式显示"""
+        self.detect_format_btn.config(state='normal', text="检测可用格式")
+
+        format_text = f"检测到 {len(formats)} 种可下载格式:\n"
+        for i, fmt in enumerate(formats, 1):
+            format_text += f"{i}. {fmt['description']}\n"
+
+        self.available_formats_var.set(format_text)
+        self.log_message(f"格式检测完成，找到 {len(formats)} 个可用格式")
+
+    def _show_format_error(self, error):
+        """显示格式检测错误"""
+        self.detect_format_btn.config(state='normal', text="检测可用格式")
+        self.available_formats_var.set("格式检测失败，使用默认选项")
+        messagebox.showerror("错误", f"格式检测失败: {error}")
 
     def download_with_strategy(self, url, temp_dir, strategy):
         """使用指定策略下载视频"""
