@@ -15,7 +15,7 @@ This project successfully creates a complete Windows one-click installer solutio
 |------|------|---------|
 | **`一键打包.bat`** | 1.9 KB | One-click build script, double-click to complete packaging |
 | **`build_package.py`** | 6.9 KB | Core packaging tool using PyInstaller |
-| **`gui_extractor_enhanced.py`** | 27.2 KB | Enhanced main program with GUI interface |
+| **`gui_extractor_simple.py`** | 42.5 KB | 🎯 **MAIN PROGRAM** - Simplified Bilibili audio extractor with VIP QR login |
 
 ### Configuration Files (1)
 
@@ -23,11 +23,12 @@ This project successfully creates a complete Windows one-click installer solutio
 |------|------|---------|
 | **`requirements.txt`** | 0.2 KB | Python dependencies list |
 
-### Alternative Files (1)
+### Alternative Files (2)
 
 | File | Size | Purpose |
 |------|------|---------|
-| **`bilibili_audio_extractor.py`** | 8.0 KB | Basic extractor (alternative) |
+| **`gui_extractor_enhanced.py`** | 27.2 KB | Enhanced extractor with multiple audio quality options |
+| **`bilibili_audio_extractor.py`** | 8.0 KB | Basic extractor (command line version) |
 
 ### Output Files
 
@@ -63,11 +64,11 @@ This project successfully creates a complete Windows one-click installer solutio
 ## 🎯 Core Features
 
 ### Program Features
-- ✅ Extract high-quality audio from Bilibili videos
+- ✅ Extract highest quality audio from Bilibili videos (**Main program: gui_extractor_simple.py**)
 - ✅ Support FLAC lossless and MP3 formats
-- ✅ Three audio quality options
+- ✅ Bilibili VIP QR code login support
+- ✅ Automatically select highest quality audio stream
 - ✅ Configuration memory function
-- ✅ Option to keep video files
 - ✅ Completely standalone, no Python installation required
 
 ### Build System
@@ -101,20 +102,40 @@ This project successfully creates a complete Windows one-click installer solutio
    - Double-click `启动程序.bat` (Chinese version)
    - Or double-click `Launch.bat` (English version)
 
-### Audio Quality Options
+### 🎯 Main Program: gui_extractor_simple.py Features
 
-- **🎛️ Original Quality**: Maintains original parameters, best sound quality, larger file size
-- **📻 CD Quality**: Standard CD quality, balanced sound and file size
-- **🎵 MP3 Quality**: Smaller files, suitable for storage and sharing
+- **🎵 Highest Quality Priority**: Automatically detects and downloads highest quality audio
+- **🔐 Bilibili VIP Support**: QR code login for higher quality access
+- **📱 Smart QR Code**: Local generation + external API fallback + text link backup
+- **⚡ One-Click Operation**: Enter URL → Click extract → Automatic completion
+- **📝 Detailed Logging**: Real-time processing progress and status
 
 ### Usage Steps
 
-1. Double-click desktop shortcut or run launch script
-2. Paste Bilibili URL in "Video URL" input box
-3. Select output directory (optional)
-4. Choose audio quality
-5. Choose whether to keep video files
-6. Click "Start Extracting Audio"
+1. **Launch Main Program**
+   - Run `gui_extractor_simple.py`
+
+2. **Bilibili Login (Recommended)**
+   - Click "B站登录" button
+   - Use Bilibili app to scan QR code
+   - Get VIP high-quality access
+
+3. **Enter Video URL**
+   - Paste URL in "B站视频链接" input box
+   - Example: `https://www.bilibili.com/video/BV1Hs4y1B7T2`
+
+4. **Select Output Directory**
+   - Click "浏览" to choose save location
+   - Default: `User Directory/B站音频提取`
+
+5. **Start Extraction**
+   - Click "开始提取音频" button
+   - Program automatically completes download and extraction
+
+6. **Get Results**
+   - Output FLAC lossless format (priority)
+   - Or MP3 high-quality format (fallback)
+   - Filename: `Video Title_最高音质.flac`
 
 ---
 
@@ -134,8 +155,11 @@ A: Windows 7/8/10/11, 64-bit recommended.
 **Q: How large is the installer package?**
 A: Approximately 35MB, including all necessary files.
 
-**Q: How to update the program?**
-A: Re-run "一键打包.bat" to generate a new version.
+**Q: How to get the highest quality?**
+A: Use a Bilibili VIP account to login, the program will automatically select the highest quality.
+
+**Q: QR code not displaying?**
+A: You can use text link login method, or install qrcode library for local generation.
 
 ### Runtime Issues
 
