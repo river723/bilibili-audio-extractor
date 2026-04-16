@@ -47,7 +47,7 @@ class BilibiliAudioExtractorGUI:
 
         self.root.title("B站音频提取器 - 精简版")
 
-        self.root.geometry("550x500")
+        self.root.geometry("550x600")
 
         self.root.minsize(500, 450)
 
@@ -329,6 +329,25 @@ class BilibiliAudioExtractorGUI:
         except:
 
             self.log_message("✗ FFmpeg 未安装，请从 https://ffmpeg.org 下载安装")
+
+
+        # 检查qrcode库
+
+        try:
+
+            import qrcode
+
+            qrcode_available = True
+
+            self.log_message("✓ qrcode库已安装（本地二维码生成可用）")
+
+        except ImportError:
+
+            qrcode_available = False
+
+            self.log_message("⚠ qrcode库未安装，建议运行: 一键打包.bat install")
+
+            self.log_message("  当前将使用外部API或文字链接生成二维码")
 
 
     def show_bilibili_login_menu(self):

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-B站音频提取器 - 简易打包工具
+B站音频提取器 - 统一安装与打包工具
+
+此脚本整合了所有依赖安装和打包功能，提供完整的解决方案
 """
 
 import os
@@ -9,35 +11,238 @@ import subprocess
 import shutil
 import json
 import zipfile
+import time
 from pathlib import Path
 
-class PackageBuilder:
+class UnifiedInstaller:
+    """统一安装器"""
+
     def __init__(self):
         self.project_dir = Path(__file__).parent
         self.build_dir = self.project_dir / "build"
         self.output_dir = self.project_dir / "output"
         self.version = "2.1.0"
         self.app_name = "B站音频提取器"
+        self.log_file = Path.home() / ".bilibili_audio_extractor" / "install_log.txt"
+        self.log_file.parent.mkdir(exist_ok=True)
 
-    def check_dependencies(self):
-        print("检查依赖...")
+    def log_message(self, message):
+        """记录日志"""
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {message}\n")
+
+    def print_status(self, message, status_type="info"):
+        """打印状态消息"""
+        if status_type == "info":
+            print(f"ℹ {message}")
+        elif status_type == "success":
+            print(f"✓ {message}")
+        elif status_type == "warning":
+            print(f"⚠ {message}")
+        elif status_type == "error":
+            print(f"✗ {message}")
+        else:
+            print(message)
+
+    def run_command(self, cmd, timeout=120):
+        """运行命令并返回结果"""
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            return result.returncode == 0, result.stdout, result.stderr
+        except subprocess.TimeoutExpired:
+            return False, "", "Command timed out"
+        except Exception as e:
+            return False, "", str(e)
+
+    def check_core_dependencies(self):
+        """检查核心依赖"""
+        self.print_status("检查核心依赖...", "info")
+        self.log_message("开始检查核心依赖")
+
+        # 检查you-get
+        try:
+            import you_get
+            self.print_status("you-get 已安装", "success")
+            self.log_message("you-get 检查通过")
+        except ImportError:
+            self.print_status("you-get 未安装", "error")
+            self.log_message("you-get 未安装")
+            return False
+
+        # 检查FFmpeg
+        success, stdout, stderr = self.run_command(['ffmpeg', '-version'])
+        if success:
+            self.print_status("FFmpeg 已安装", "success")
+            self.log_message("FFmpeg 检查通过")
+        else:
+            self.print_status("FFmpeg 未安装，请从 https://ffmpeg.org 下载安装", "error")
+            self.log_message("FFmpeg 未安装")
+            return False
+
+        return True
+
+    def install_all_dependencies(self):
+        """安装所有Python依赖"""
+        self.print_status("\n安装Python依赖...", "info")
+        self.log_message("开始安装Python依赖")
+
+        dependencies = {
+            "qrcode[pil]": "qrcode库（本地二维码生成）",
+            "Pillow": "Pillow库（图像处理）",
+            "requests": "requests库（网络请求）",
+            "mutagen": "mutagen库（音频元数据）"
+        }
+
+        results = {}
+
+        for package, description in dependencies.items():
+            self.print_status(f"检查 {description}...", "info")
+
+            # 检查是否已安装
+            if package == "qrcode[pil]":
+                check_cmd = "import qrcode"
+            else:
+                check_cmd = f"import {package.split('[')[0].lower()}"
+
+            try:
+                exec(check_cmd)
+                self.print_status(f"{description} 已安装", "success")
+                results[package] = True
+                continue
+            except ImportError:
+                pass
+
+            # 安装依赖
+            self.print_status(f"正在安装 {description}...", "info")
+            success, stdout, stderr = self.run_command([
+                sys.executable, "-m", "pip", "install", package
+            ], timeout=300)
+
+            if success:
+                self.print_status(f"{description} 安装成功", "success")
+                results[package] = True
+                self.log_message(f"{package} 安装成功")
+            else:
+                self.print_status(f"{description} 安装失败: {stderr[:100]}", "warning")
+                results[package] = False
+                self.log_message(f"{package} 安装失败: {stderr}")
+
+        return results
+
+    def verify_installation(self):
+        """验证安装结果"""
+        self.print_status("\n验证安装结果...", "info")
+        self.log_message("开始验证安装结果")
+
+        verification_results = {}
+
+        # 验证qrcode
+        try:
+            import qrcode
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data("https://www.bilibili.com")
+            qr.make(fit=True)
+            verification_results["qrcode"] = True
+            self.print_status("qrcode 功能验证成功", "success")
+        except Exception as e:
+            verification_results["qrcode"] = False
+            self.print_status(f"qrcode 功能验证失败: {e}", "warning")
+
+        # 验证Pillow
+        try:
+            from PIL import Image
+            verification_results["Pillow"] = True
+            self.print_status("Pillow 功能验证成功", "success")
+        except Exception as e:
+            verification_results["Pillow"] = False
+            self.print_status(f"Pillow 功能验证失败: {e}", "warning")
+
+        return verification_results
+
+    def show_installation_summary(self, install_results, verification_results):
+        """显示安装摘要"""
+        print("\n" + "="*60)
+        self.print_status("安装摘要", "info")
+        print("="*60)
+
+        print("\n依赖安装状态:")
+        for package, success in install_results.items():
+            status = "✓ 已安装" if success else "⚠ 安装失败"
+            print(f"  - {package}: {status}")
+
+        print("\n功能验证状态:")
+        for lib, success in verification_results.items():
+            status = "✓ 正常" if success else "⚠ 异常"
+            print(f"  - {lib}: {status}")
+
+        print("\n功能说明:")
+        if verification_results.get("qrcode", False):
+            self.print_status("本地二维码生成已启用（推荐）", "success")
+        else:
+            self.print_status("将使用外部API生成二维码", "warning")
+            print("    用户仍可正常使用，但需要网络连接")
+
+        self.log_message("安装摘要已显示")
+
+    def run_installation_only(self):
+        """仅运行安装（不打包）"""
+        print("="*60)
+        print("B站音频提取器 - 依赖安装程序")
+        print("="*60)
+        print()
+
+        self.log_message("开始依赖安装流程")
+
+        try:
+            # 1. 检查核心依赖
+            if not self.check_core_dependencies():
+                self.print_status("核心依赖检查失败，请先安装必要的依赖", "error")
+                self.log_message("核心依赖检查失败")
+                return False
+
+            # 2. 安装Python依赖
+            install_results = self.install_all_dependencies()
+
+            # 3. 验证安装
+            verification_results = self.verify_installation()
+
+            # 4. 显示摘要
+            self.show_installation_summary(install_results, verification_results)
+
+            self.print_status("\n依赖安装完成！", "success")
+            print("现在可以正常运行B站音频提取器了！")
+            print("运行命令: python gui_extractor_simple.py")
+
+            self.log_message("依赖安装流程完成")
+            return True
+
+        except Exception as e:
+            self.print_status(f"安装过程中出现错误: {e}", "error")
+            self.log_message(f"安装错误: {e}")
+            return False
+
+class PackageBuilder(UnifiedInstaller):
+    """打包构建器"""
+
+    def check_build_dependencies(self):
+        """检查打包依赖"""
+        print("检查打包依赖...")
         try:
             import PyInstaller
             print("[OK] PyInstaller已安装")
         except ImportError:
             print("[ERROR] PyInstaller未安装")
             return False
-
-        try:
-            import you_get
-            print("[OK] you-get已安装")
-        except ImportError:
-            print("[ERROR] you-get未安装")
-            return False
-
         return True
 
     def create_exe(self):
+        """创建可执行文件"""
         print("\n创建可执行文件...")
         self.build_dir.mkdir(exist_ok=True)
 
@@ -64,15 +269,16 @@ class PackageBuilder:
             return False
 
     def create_youget_bundle(self):
+        """创建you-get捆绑包"""
         print("\n创建you-get捆绑包...")
         youget_dir = self.build_dir / "you-get"
-        youget_dir.mkdir(exist_ok=True)  # 创建输出目录
+        youget_dir.mkdir(exist_ok=True)
 
         try:
             import you_get
-            youget_path = Path(you_get.__file__).parent  # 获取you-get安装路径
+            youget_path = Path(you_get.__file__).parent
 
-            for item in youget_path.rglob('*'):  # 遍历you-get所有文件
+            for item in youget_path.rglob('*'):
                 if item.is_file():
                     relative_path = item.relative_to(youget_path)
                     target_path = youget_dir / relative_path
@@ -86,6 +292,7 @@ class PackageBuilder:
             return False
 
     def create_launch_script(self):
+        """创建启动脚本"""
         print("\n创建启动脚本...")
 
         script = """@echo off
@@ -126,16 +333,17 @@ endlocal
         return True
 
     def create_readme(self):
+        """创建说明文档"""
         print("\n创建说明文档...")
 
-        readme = """B站音频提取器 v2.0.0
+        readme = f"""B站音频提取器 v{self.version}
 ==================
 
 功能特色
 --------
 - 从B站视频提取高质量音频
 - 支持FLAC无损和MP3格式
-- 三种音频质量选择
+- 本地二维码生成（已预装qrcode库）
 - 配置记忆功能
 - 视频文件保留选项
 
@@ -143,8 +351,7 @@ endlocal
 --------
 1. 运行 "启动程序.bat"
 2. 输入B站视频链接
-3. 选择音频质量
-4. 点击"开始提取音频"
+3. 点击"开始提取音频"
 
 首次使用准备
 ------------
@@ -161,12 +368,7 @@ endlocal
 --------
 1. 在"视频URL"输入框粘贴B站链接
 2. 选择输出目录 (可选)
-3. 选择音频质量:
-   - 原始质量: 保持原始参数，音质最佳
-   - CD音质: 标准CD音质，平衡音质和文件大小
-   - MP3音质: 文件小，适合存储和分享
-4. 选择是否保留视频文件
-5. 点击"开始提取音频"
+3. 点击"开始提取音频"
 
 注意事项
 --------
@@ -200,6 +402,7 @@ A: 在设置的输出目录中，文件名基于视频标题
         return True
 
     def create_package(self):
+        """创建安装包"""
         print("\n创建安装包...")
         self.output_dir.mkdir(exist_ok=True)
 
@@ -215,6 +418,7 @@ A: 在设置的输出目录中，文件名基于视频标题
         return True
 
     def cleanup(self):
+        """清理临时文件"""
         print("\n清理临时文件...")
         temp_dir = self.build_dir / "temp"
         if temp_dir.exists():
@@ -226,12 +430,20 @@ A: 在设置的输出目录中，文件名基于视频标题
 
         print("[OK] 清理完成")
 
-    def build(self):
+    def build_package(self):
+        """构建安装包"""
         print(f"开始构建{self.app_name}安装包")
         print("=" * 50)
 
-        if not self.check_dependencies():
+        if not self.check_build_dependencies():
             return False
+
+        # 先安装依赖
+        print("\n" + "=" * 20 + " 安装依赖 " + "=" * 20)
+        if not self.run_installation_only():
+            print("[WARNING] 依赖安装存在问题，继续打包...")
+
+        print("\n" + "=" * 20 + " 开始打包 " + "=" * 20)
 
         steps = [
             ("创建可执行文件", self.create_exe),
@@ -256,13 +468,17 @@ A: 在设置的输出目录中，文件名基于视频标题
         return True
 
 def main():
-    builder = PackageBuilder()
-    if builder.build():
-        print("\n构建成功!")
-        return 0
+    """主函数"""
+    if len(sys.argv) > 1 and sys.argv[1] == "install":
+        # 仅安装依赖模式
+        builder = UnifiedInstaller()
+        success = builder.run_installation_only()
+        return 0 if success else 1
     else:
-        print("\n构建失败")
-        return 1
+        # 完整打包模式
+        builder = PackageBuilder()
+        success = builder.build_package()
+        return 0 if success else 1
 
 if __name__ == "__main__":
     sys.exit(main())
