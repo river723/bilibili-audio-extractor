@@ -441,7 +441,7 @@ class BilibiliAudioExtractorGUI:
 
         qrcode_label = tk.Label(qrcode_frame, text="获取二维码中...", bg='white', font=('Arial', 9))
 
-        qrcode_label.pack(pady=20)
+        qrcode_label.pack(pady=20, padx=20, anchor='center', fill='both', expand=True)
 
 
         status_label = tk.Label(login_window, text="打开B站APP → 扫一扫 → 摄像头", fg='gray', font=('Arial', 8))
@@ -553,10 +553,10 @@ class BilibiliAudioExtractorGUI:
                             try:
                                 # 使用本地qrcode库生成二维码
                                 qr = qrcode.QRCode(
-                                    version=1,
-                                    error_correction=qrcode.constants.ERROR_CORRECT_L,
-                                    box_size=10,
-                                    border=4,
+                                    version=None,  # 自动选择版本
+                                    error_correction=qrcode.constants.ERROR_CORRECT_M,  # 中等容错
+                                    box_size=15,   # 增大像素大小
+                                    border=8,      # 增大边距确保静区
                                 )
                                 qr.add_data(qrcode_data)
                                 qr.make(fit=True)
@@ -564,15 +564,11 @@ class BilibiliAudioExtractorGUI:
                                 # 生成二维码图片
                                 qr_image = qr.make_image(fill_color="black", back_color="white")
 
-                                # 转换为PhotoImage
-                                # 保存到BytesIO
-                                img_byte_array = BytesIO()
-                                qr_image.save(img_byte_array, format='PNG')
-                                img_byte_array.seek(0)
+                                # 调整二维码大小确保清晰显示
+                                qr_image = qr_image.resize((300, 300), Image.LANCZOS)
 
-                                # 使用PIL打开并转换为PhotoImage
-                                image = Image.open(img_byte_array)
-                                photo = ImageTk.PhotoImage(image)
+                                # 转换为PhotoImage
+                                photo = ImageTk.PhotoImage(qr_image)
 
                                 # 显示二维码图片，隐藏文字链接
                                 qrcode_label.config(image=photo, text="")
@@ -794,25 +790,31 @@ class BilibiliAudioExtractorGUI:
 
                     data = json.load(f)
 
-                # 生成cookie字符串
-
+                # 生成cookie字符串 - 匹配parse_and_save_cookie保存的格式
                 cookies = []
 
-                if 'timeline' in data:
+                # 检查是否有SESSDATA（主要的登录凭证）
+                if 'SESSDATA' in data and data['SESSDATA']:
+                    cookies.append(f"SESSDATA={data['SESSDATA']}")
 
-                    for key, value in data['timeline'].items():
+                if 'bili_jct' in data and data['bili_jct']:
+                    cookies.append(f"bili_jct={data['bili_jct']}")
 
-                        if isinstance(value, dict) and 'value' in value:
+                if 'DEDEUserID' in data and data['DEDEUserID']:
+                    cookies.append(f"DEDEUserID={data['DEDEUserID']}")
 
-                            cookies.append(f"{key}={value['value']}")
+                if 'DEDEUserID__ckMd5' in data and data['DEDEUserID__ckMd5']:
+                    cookies.append(f"DEDEUserID__ckMd5={data['DEDEUserID__ckMd5']}")
+
+                if 'sid' in data and data['sid']:
+                    cookies.append(f"sid={data['sid']}")
 
                 if cookies:
-
+                    self.log_message(f"✓ 读取到B站登录信息，Cookie项数: {len(cookies)}")
                     return '; '.join(cookies)
 
-            except:
-
-                pass
+            except Exception as e:
+                self.log_message(f"读取Cookie失败: {e}")
 
         return None
 
