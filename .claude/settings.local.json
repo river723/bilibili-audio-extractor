@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(yt-dlp *)",
+      "Bash(ffmpeg *)",
+      "Read(e:/study/claude/bilibili-audio-extractor/**)",
+      "Write(e:/study/claude/bilibili-audio-extractor/**)",
+      "Edit(e:/study/claude/bilibili-audio-extractor/**)"
+    ],
+    "additionalDirectories": [
+      "e:/study/claude/bilibili-audio-extractor"
+    ]
+  },
+  "env": {
+    "PYTHONIOENCODING": "utf-8"
+  }
+}

@@ -8,6 +8,9 @@ B站音频提取器 - 精简版
 
 只下载所输入URL的最高音质音频（支持扫码登录大会员）
 
+依赖: yt-dlp + ffmpeg
+
+更新: 已从 you-get 迁移到 yt-dlp，支持更高质量的音频提取
 """
 
 
@@ -311,13 +314,13 @@ class BilibiliAudioExtractorGUI:
 
         try:
 
-            subprocess.run(['you-get', '--version'], capture_output=True, check=True)
+            subprocess.run(['yt-dlp', '--version'], capture_output=True, check=True)
 
-            self.log_message("✓ you-get 已安装")
+            self.log_message("✓ yt-dlp 已安装")
 
         except:
 
-            self.log_message("✗ you-get 未安装，请运行: pip install you-get")
+            self.log_message("✗ yt-dlp 未安装，请运行: pip install yt-dlp")
 
 
         try:
@@ -767,6 +770,18 @@ class BilibiliAudioExtractorGUI:
             self.log_message(f"保存Cookie失败: {e}")
 
 
+    def bilibili_logout(self):
+        """退出B站登录"""
+        try:
+            if self.bilibili_cookie_file.exists():
+                self.bilibili_cookie_file.unlink()
+                self.log_message("✓ 已退出B站登录")
+                self.bili_jct = None
+            else:
+                self.log_message("✓ 未检测到B站登录状态")
+        except Exception as e:
+            self.log_message(f"退出登录失败: {e}")
+
     def show_login_success(self, window, progress):
 
         """显示登录成功"""
@@ -893,122 +908,127 @@ class BilibiliAudioExtractorGUI:
 
         try:
 
-            # 使用 you-get 的 JSON 输出获取视频信息
+            # 使用 yt-dlp 获取视频信息
 
-            cmd = ['you-get', '--json', url]
+            cmd = ['yt-dlp', '--dump-json', '--no-playlist', url]
 
-            result = subprocess.run(cmd, capture_output=True, text=False)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
 
             if result.returncode != 0:
 
-                # 如果失败，直接返回原URL，you-get会自动选择最高质量
+                # 如果失败，直接返回原URL，yt-dlp会自动选择最高质量
 
                 self.log_message("无法获取详细信息，将下载最高质量音频")
 
                 return url, "自动选择最高质量"
 
 
-            # 解码输出
-
-            try:
-
-                stdout_text = result.stdout.decode('utf-8')
-
-            except UnicodeDecodeError:
-
-                stdout_text = result.stdout.decode('gbk', errors='ignore')
-
-
             import json
 
-            video_info = json.loads(stdout_text)
+            video_info = json.loads(result.stdout)
 
 
-            if 'streams' in video_info:
+            # yt-dlp 格式信息在 formats 字段中
 
-                streams = video_info['streams']
+            if 'formats' in video_info:
+
+                formats = video_info['formats']
 
 
                 # 查找最高音质的音频流
 
-                highest_stream = None
+                highest_audio_format = None
 
                 highest_score = -1
 
 
-                for stream_key, stream_info in streams.items():
+                for fmt in formats:
 
-                    if isinstance(stream_info, dict):
+                    if isinstance(fmt, dict):
 
-                        # 给不同音质打分
+                        # 只考虑纯音频格式
 
-                        score = 0
+                        if fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
 
-                        container = stream_info.get('container', '').lower()
+                            score = 0
 
-                        quality = stream_info.get('quality', '').lower()
+                            # 根据音频编码格式打分
 
+                            acodec = fmt.get('acodec', '').lower()
 
-                        # 优先选择音频流（不含视频或纯音频）
+                            # flac, aiff, wav 是无损格式
 
-                        # flac, aiff, wav, m4a 是无损格式
+                            if 'flac' in acodec or 'pcm' in acodec:
 
-                        if 'flac' in container or 'aiff' in container or 'wav' in container:
+                                score += 2000  # 最高优先级给FLAC
 
-                            score += 1000
+                            elif 'aac' in acodec:
 
-                        elif 'm4a' in container or 'mp3' in container:
+                                score += 500
 
-                            score += 500
+                            elif 'opus' in acodec or 'vorbis' in acodec:
 
+                                score += 300
 
-                        # 检查是否是音频流（没有 vid 或 video 相关字段）
+                            elif 'mp3' in acodec:
 
-                        if 'vid' not in stream_key.lower() and 'video' not in stream_key.lower():
-
-                            score += 100
-
-
-                        # 根据质量描述打分
-
-                        if 'hi-res' in quality or 'hirez' in quality:
-
-                            score += 50
-
-                        if 'lossless' in quality or '无损' in quality:
-
-                            score += 40
-
-                        if '320k' in quality:
-
-                            score += 30
-
-                        if '128k' in quality:
-
-                            score += 10
+                                score += 100
 
 
-                        if score > highest_score:
+                            # 根据比特率打分
 
-                            highest_score = score
+                            abr = fmt.get('abr', 0) or 0
 
-                            highest_stream = {
-
-                                'stream_key': stream_key,
-
-                                'container': stream_info.get('container', 'auto'),
-
-                                'quality': stream_info.get('quality', '自动'),
-
-                                'url': url  # 使用原始URL，you-get会自动选择流
-
-                            }
+                            score += int(abr) if abr else 0
 
 
-                if highest_stream:
+                            # 根据采样率打分
 
-                    quality_desc = f"{highest_stream['quality']} ({highest_stream['container']})"
+                            asr = fmt.get('asr', 0) or 0
+
+                            score += int(asr) // 100 if asr else 0
+
+
+                            if score > highest_score:
+
+                                highest_score = score
+
+                                highest_audio_format = {
+
+                                    'format_id': fmt.get('format_id', 'unknown'),
+
+                                    'acodec': acodec,
+
+                                    'abr': abr,
+
+                                    'asr': asr,
+
+                                    'format_note': fmt.get('format_note', ''),
+
+                                    'url': fmt.get('url', url)
+
+                                }
+
+
+                if highest_audio_format:
+
+                    quality_parts = []
+
+                    if highest_audio_format['abr']:
+
+                        quality_parts.append(f"{int(highest_audio_format['abr'])}kbps")
+
+                    if highest_audio_format['asr']:
+
+                        quality_parts.append(f"{int(highest_audio_format['asr'])}Hz")
+
+                    if highest_audio_format['acodec']:
+
+                        quality_parts.append(highest_audio_format['acodec'].upper())
+
+
+                    quality_desc = " ".join(quality_parts) if quality_parts else "最高音质"
 
                     self.log_message(f"✓ 最高音质: {quality_desc}")
 
@@ -1086,21 +1106,39 @@ class BilibiliAudioExtractorGUI:
             self.log_message(f"将下载: {quality_desc}")
 
 
-            # 5. 使用 you-get 下载视频（包含最高音质音频）
+            # 5. 使用 yt-dlp 直接下载最高音质音频
 
             temp_dir = output_path / ".temp_audio_extract"
 
             temp_dir.mkdir(parents=True, exist_ok=True)
 
 
-            self.update_progress(50, "下载视频中...")
+            self.update_progress(50, "下载最高音质音频...")
 
-            self.log_message("开始下载视频（包含最高音质音频）...")
+            self.log_message("开始下载最高音质音频...")
 
 
-            # 构建you-get命令
+            # 构建yt-dlp命令 - 下载最佳质量音频
 
-            cmd = ['you-get', '--output-dir', str(temp_dir)]
+            cmd = [
+
+                'yt-dlp',
+
+                '--extract-audio',  # 提取音频
+
+                '--audio-format', 'best',  # 使用最佳可用格式
+
+                '--audio-quality', '0',  # 最高质量
+
+                '--output', str(temp_dir / '%(title)s.%(ext)s'),
+
+                '--no-playlist',  # 不下载播放列表
+
+                '--retries', '3',  # 重试次数
+
+                '--fragment-retries', '3',  # 片段重试次数
+
+            ]
 
 
             # 使用Cookie
@@ -1110,8 +1148,21 @@ class BilibiliAudioExtractorGUI:
                 cookie_file = temp_dir / "bilibili_cookie.txt"
 
                 with open(cookie_file, 'w', encoding='utf-8') as f:
+                    # yt-dlp 需要 Netscape 格式的 cookie 文件
+                    f.write("# Netscape HTTP Cookie File\n")
+                    f.write("# https://curl.haxx.se/docs/http-cookies.html\n")
+                    f.write("# This file was generated by B站音频提取器\n\n")
 
-                    f.write(f"Cookie: {cookie_str}\n")
+                    for part in cookie_str.split('; '):
+                        if '=' in part:
+                            key, value = part.split("=", 1)
+                            # Netscape cookie format: domain flag path secure expires name value
+                            # .bilibili.com  domain
+                            # TRUE              flag (all domains under .bilibili.com)
+                            # /                 path
+                            # FALSE             secure (not HTTPS only)
+                            # 0                 expires (session cookie)
+                            f.write(f".bilibili.com\tTRUE\t/\tFALSE\t0\t{key.strip()}\t{value.strip()}\n")
 
                 cmd.extend(['--cookies', str(cookie_file)])
 
@@ -1121,14 +1172,14 @@ class BilibiliAudioExtractorGUI:
             cmd.append(url)
 
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
 
             if result.returncode != 0:
 
                 self.log_message("下载失败，尝试不使用Cookie...")
 
-                cmd_no_cookie = ['you-get', '--output-dir', str(temp_dir), url]
+                cmd_no_cookie = [arg for arg in cmd if '--cookies' not in arg and str(cookie_file) not in arg]
 
                 result = subprocess.run(cmd_no_cookie, capture_output=True, text=True)
 
@@ -1138,30 +1189,30 @@ class BilibiliAudioExtractorGUI:
                 raise Exception(f"下载失败: {result.stderr[:200] if result.stderr else '未知错误'}")
 
 
-            self.log_message("✓ 视频下载完成")
+            self.log_message("✓ 音频下载完成")
 
 
-            # 6. 查找下载的文件
+            # 6. 查找下载的音频文件
 
-            video_path = None
+            audio_path = None
 
-            for ext in ['*.mp4', '*.flv', '*.mkv', '*.avi', '*.m4a']:
+            for ext in ['*.flac', '*.m4a', '*.mp3', '*.opus', '*.aac', '*.wav']:
 
                 files = list(temp_dir.glob(ext))
 
                 if files:
 
-                    video_path = files[0]
+                    audio_path = files[0]
 
                     break
 
 
-            if not video_path:
+            if not audio_path:
 
-                raise Exception("未找到下载的视频文件")
+                raise Exception("未找到下载的音频文件")
 
 
-            self.log_message(f"✓ 找到视频文件: {video_path.name}")
+            self.log_message(f"✓ 找到音频文件: {audio_path.name}")
 
 
             # 7. 提取音频（最高音质 - 保持原始质量）
@@ -1171,50 +1222,44 @@ class BilibiliAudioExtractorGUI:
             self.log_message("开始提取音频（保持原始最高音质）...")
 
 
-            file_stem = video_path.stem
+            # yt-dlp 已经下载了音频文件
 
-            output_file = output_path / f"{file_stem}_最高音质.flac"
-
-
-            cmd = [
-
-                'ffmpeg',
-
-                '-i', str(video_path),
-
-                '-vn',
-
-                '-c:a', 'flac',
-
-                '-compression_level', '12',
-
-                '-y',
-
-                str(output_file)
-
-            ]
+            import shutil
 
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            file_stem = audio_path.stem
 
 
-            if result.returncode != 0:
+            # 检查是否需要转换为FLAC
 
-                # 如果FLAC提取失败，尝试其他格式
+            if audio_path.suffix.lower() == '.flac':
 
-                output_file = output_path / f"{file_stem}_最高音质.mp3"
+                # 已经是FLAC格式，直接复制
+
+                output_file = output_path / f"{file_stem}_最高音质.flac"
+
+                shutil.copy2(audio_path, output_file)
+
+                self.log_message("✓ 已下载FLAC无损音频")
+
+            else:
+
+                # 转换为FLAC格式
+
+                output_file = output_path / f"{file_stem}_最高音质.flac"
+
+                self.log_message(f"正在将 {audio_path.suffix} 转换为FLAC无损格式...")
+
 
                 cmd = [
 
                     'ffmpeg',
 
-                    '-i', str(video_path),
+                    '-i', str(audio_path),
 
-                    '-vn',
+                    '-c:a', 'flac',
 
-                    '-c:a', 'libmp3lame',
-
-                    '-b:a', '320k',
+                    '-compression_level', '12',
 
                     '-y',
 
@@ -1222,12 +1267,23 @@ class BilibiliAudioExtractorGUI:
 
                 ]
 
-                result = subprocess.run(cmd, capture_output=True, text=True)
+
+                result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
 
-            if result.returncode != 0:
+                if result.returncode != 0:
 
-                raise Exception(f"音频提取失败: {result.stderr[:200] if result.stderr else '未知错误'}")
+                    # 转换失败，使用原文件
+
+                    self.log_message(f"FLAC转换失败，使用原格式: {result.stderr[:100] if result.stderr else '未知错误'}")
+
+                    output_file = output_path / f"{file_stem}_最高音质{audio_path.suffix}"
+
+                    shutil.copy2(audio_path, output_file)
+
+                else:
+
+                    self.log_message("✓ 已转换为FLAC无损格式")
 
 
             if not output_file.exists():
