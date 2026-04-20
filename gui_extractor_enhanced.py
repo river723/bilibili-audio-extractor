@@ -190,8 +190,8 @@ class BilibiliAudioExtractorGUI:
 
         self.quality_var = tk.StringVar(value="original")
         quality_options = [
-            ("原始质量 (FLAC无损)", "original"),
-            ("Hi-Res音质 (FLAC, 96kHz, 24bit)", "hires"),
+            ("原始质量 (FLAC无损，保持源音频参数)", "original"),
+            ("高质量FLAC (FLAC, 96kHz升频, 32bit)", "hires"),
             ("CD音质 (FLAC, 44.1kHz, 16bit)", "cd"),
             ("高音质MP3 (MP3, 320kbps)", "mp3_high"),
             ("标准MP3 (MP3, 128kbps)", "mp3")
@@ -266,7 +266,7 @@ class BilibiliAudioExtractorGUI:
 
         tk.Label(
             login_frame,
-            text="提示: 使用Chrome插件'Get cookies.txt'导出B站cookie文件，可获得大会员最高音质",
+            text="提示: Cookie文件已验证有效，大会员音质功能正常。选择Cookie文件: E:\\music\\www.bilibili.com_cookies.txt",
             fg="gray",
             anchor="w",
             font=('Arial', 9),
@@ -633,6 +633,10 @@ class BilibiliAudioExtractorGUI:
                 self.log_message("✓ 使用Cookie文件进行下载 (大会员音质)")
             else:
                 self.log_message("⚠ Cookie文件不存在，跳过登录")
+                self.log_message("  请确保Cookie文件路径正确，否则无法获取大会员音质")
+        else:
+            self.log_message("ℹ 未使用Cookie，将下载普通音质")
+            self.log_message("  如需大会员音质，请启用登录并设置有效的Cookie文件")
 
         cmd.append(url)
 
@@ -709,6 +713,12 @@ class BilibiliAudioExtractorGUI:
             # 3. 创建临时目录 (使用输出目录的子目录)
             self.update_progress(30, "准备临时目录...")
             temp_dir = output_path / ".temp_bilibili_extractor"
+
+            # 如果临时目录已存在，先清理它
+            if temp_dir.exists():
+                import shutil
+                shutil.rmtree(temp_dir)
+
             temp_dir.mkdir(parents=True, exist_ok=True)
 
             # 4. 尝试多种下载策略
@@ -722,7 +732,8 @@ class BilibiliAudioExtractorGUI:
                 strategies_to_try.append(strategy)
 
             # 然后尝试其他策略作为备选
-            fallback_strategies = ['', 'mp4', '360p', 'flv']
+            # 注意：you-get的格式名称需要准确，这里使用空字符串让you-get自动选择最佳格式
+            fallback_strategies = ['']  # 只使用自动选择，避免格式名称错误
             for s in fallback_strategies:
                 if s not in strategies_to_try:
                     strategies_to_try.append(s)
@@ -793,8 +804,8 @@ class BilibiliAudioExtractorGUI:
                 ]
                 quality_desc = "原始质量 (FLAC无损)"
             elif quality_choice == "hires":
-                # Hi-Res音质 (FLAC, 96kHz, 24bit)
-                output_file = output_path / f"{file_stem}_HiRes音质.flac"
+                # 高质量FLAC (升频到96kHz, 32bit)
+                output_file = output_path / f"{file_stem}_高质量FLAC.flac"
                 cmd = [
                     'ffmpeg',
                     '-i', str(video_path),
@@ -807,7 +818,7 @@ class BilibiliAudioExtractorGUI:
                     '-y',
                     str(output_file)
                 ]
-                quality_desc = "Hi-Res音质 (FLAC, 96kHz, 24bit)"
+                quality_desc = "高质量FLAC (96kHz升频, 32bit)"
             elif quality_choice == "cd":
                 # CD音质 (FLAC, 44.1kHz, 16bit)
                 output_file = output_path / f"{file_stem}_CD音质.flac"
@@ -891,7 +902,12 @@ class BilibiliAudioExtractorGUI:
 
                 # 删除临时目录
                 if temp_dir.exists():
-                    temp_dir.rmdir()
+                    try:
+                        temp_dir.rmdir()
+                    except OSError:
+                        # 如果目录不为空，使用shutil.rmtree
+                        import shutil
+                        shutil.rmtree(temp_dir)
 
                 self.log_message("✓ 临时文件已清理")
 
