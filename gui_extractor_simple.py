@@ -1142,7 +1142,7 @@ class BilibiliAudioExtractorGUI:
 
 
             # 使用Cookie
-
+            cookie_file = None
             if cookie_str:
 
                 cookie_file = temp_dir / "bilibili_cookie.txt"
@@ -1167,30 +1167,32 @@ class BilibiliAudioExtractorGUI:
                 cmd.extend(['--cookies', str(cookie_file)])
 
                 self.log_message("✓ 使用B站Cookie进行下载")
-
+            else:
+                self.log_message("⚠ 未检测到B站登录，使用普通账号下载")
 
             cmd.append(url)
 
 
             result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
-
             if result.returncode != 0:
+                stderr_output = result.stderr if result.stderr else ''
+                error_msg = stderr_output[:200] if stderr_output else '未知错误'
 
-                self.log_message("下载失败，尝试不使用Cookie...")
+                # 如果使用了Cookie且出现412错误，尝试移除Cookie重试
+                if cookie_str and cookie_file and ('412' in stderr_output or 'Precondition Failed' in stderr_output):
+                    self.log_message("检测到Cookie失效(412错误)，自动切换到非会员下载模式...")
 
-                cmd_no_cookie = [arg for arg in cmd if '--cookies' not in arg and str(cookie_file) not in arg]
+                    cmd_no_cookie = [arg for arg in cmd if '--cookies' not in arg and str(cookie_file) not in arg]
+                    result = subprocess.run(cmd_no_cookie, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
-                result = subprocess.run(cmd_no_cookie, capture_output=True, text=True)
-
-
-            if result.returncode != 0:
-
-                raise Exception(f"下载失败: {result.stderr[:200] if result.stderr else '未知错误'}")
-
-
-            self.log_message("✓ 音频下载完成")
-
+                    if result.returncode == 0:
+                        self.log_message("✓ 非会员下载成功（最高可用音质）")
+                    else:
+                        raise Exception(f"下载失败: {result.stderr[:200] if result.stderr else '未知错误'}")
+                else:
+                    # 没有使用Cookie或非412错误，直接报错
+                    raise Exception(f"下载失败: {error_msg}")
 
             # 6. 查找下载的音频文件
 
