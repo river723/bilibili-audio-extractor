@@ -13,8 +13,24 @@ B站音频提取器 - 精简版
 更新: 已从 you-get 迁移到 yt-dlp，支持更高质量的音频提取
 """
 
+# 重定向所有输出以避免控制台窗口
+import sys
+import os
+if not sys.stdout:  # 如果没有控制台，重定向到空设备
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
 
 import tkinter as tk
+
+# 创建安全的 subprocess 配置
+def get_startup_info():
+    """获取避免创建控制台窗口的启动信息"""
+    startupinfo = None
+    if sys.platform == 'win32':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+    return startupinfo
 
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
@@ -211,6 +227,11 @@ class BilibiliAudioExtractorGUI:
 
         self.bili_jct = None
 
+        # 在GUI完全启动前进行关键依赖检查
+        self.check_critical_dependencies()
+
+        # 创建右键菜单
+        self.setup_context_menus()
 
         self.setup_ui()
 
@@ -261,6 +282,65 @@ class BilibiliAudioExtractorGUI:
             button.configure(relief='sunken')
         else:
             button.configure(relief='flat')
+
+    def check_critical_dependencies(self):
+        """检查关键依赖，如果缺少则显示错误并退出"""
+
+        # 检查FFmpeg（必需依赖）
+        try:
+            startupinfo = get_startup_info()
+            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True, startupinfo=startupinfo)
+        except:
+            # 显示错误对话框
+            error_msg = """❌ FFmpeg未安装
+
+FFmpeg是必需的音频处理工具，未安装时将无法提取音频。
+
+请按以下步骤安装：
+1. 访问 https://www.gyan.dev/ffmpeg/builds/
+2. 下载 ffmpeg-git-full.7z
+3. 解压文件
+4. 将 ffmpeg.exe 添加到系统PATH
+
+安装完成后重新启动程序。"""
+
+            # 由于此时GUI可能还未完全初始化，使用简单的消息框
+            import tkinter.messagebox as msgbox
+            msgbox.showerror("缺少必要依赖", error_msg)
+
+            # 退出程序
+            self.root.quit()
+            self.root.destroy()
+            import sys
+            sys.exit(1)
+
+    def setup_context_menus(self):
+        """设置右键上下文菜单"""
+
+        def create_context_menu(widget):
+            """为指定控件创建右键菜单"""
+            menu = tk.Menu(widget, tearoff=0)
+
+            # 添加菜单项
+            menu.add_command(label="剪切", command=lambda: widget.event_generate("<<Cut>>"))
+            menu.add_command(label="复制", command=lambda: widget.event_generate("<<Copy>>"))
+            menu.add_command(label="粘贴", command=lambda: widget.event_generate("<<Paste>>"))
+            menu.add_separator()
+            menu.add_command(label="全选", command=lambda: widget.event_generate("<<SelectAll>>"))
+
+            def show_menu(event):
+                menu.post(event.x_root, event.y_root)
+
+            # 绑定右键事件
+            widget.bind("<Button-3>", show_menu)
+
+            # 确保基本的剪贴板操作被启用
+            widget.config(takefocus=True)
+
+            return menu
+
+        # 保存菜单引用
+        self.context_menu = create_context_menu
 
     def setup_ui(self):
 
@@ -319,6 +399,9 @@ class BilibiliAudioExtractorGUI:
                            highlightthickness=1)
         url_entry.pack(fill=tk.X, pady=(0, 8))
 
+        # 为URL输入框添加右键菜单
+        self.context_menu(url_entry)
+
         example_url = "https://www.bilibili.com/video/BV1Hs4y1B7T2"
         tk.Label(url_frame, text=f"示例: {example_url}", font=GlassTheme.get_font('caption'),
                 fg=GlassTheme.get_color('text_hint'), bg=GlassTheme.get_color('card_bg'),
@@ -346,6 +429,9 @@ class BilibiliAudioExtractorGUI:
                            bd=1, highlightbackground=GlassTheme.get_color('border'),
                            highlightthickness=1)
         dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+
+        # 为目录输入框添加右键菜单
+        self.context_menu(dir_entry)
 
         browse_btn = tk.Button(dir_entry_frame, text="浏览",
                              command=self.browse_directory, width=10,
@@ -476,6 +562,9 @@ class BilibiliAudioExtractorGUI:
         )
         self.log_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
 
+        # 为日志文本框添加右键菜单
+        self.context_menu(self.log_text)
+
         # 滚动条美化需要特殊处理，暂时注释掉
         # log_scrollbar = self.log_text.master.nametowidget(self.log_text.cget('yscrollcommand').split()[0])
         # log_scrollbar.configure(bg=GlassTheme.get_color('card_bg'),
@@ -495,7 +584,8 @@ class BilibiliAudioExtractorGUI:
 
         try:
 
-            subprocess.run(['yt-dlp', '--version'], capture_output=True, check=True)
+            startupinfo = get_startup_info()
+            subprocess.run(['yt-dlp', '--version'], capture_output=True, check=True, startupinfo=startupinfo)
 
             self.log_message("✓ yt-dlp 已安装")
 
@@ -506,7 +596,7 @@ class BilibiliAudioExtractorGUI:
 
         try:
 
-            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True, startupinfo=startupinfo)
 
             self.log_message("✓ FFmpeg 已安装")
 
@@ -576,9 +666,9 @@ class BilibiliAudioExtractorGUI:
                 import threading
                 threading.Thread(target=restore_button, daemon=True).start()
 
-        except Exception as e:
-            print(f"复制到剪贴板失败: {e}")
-
+        except Exception:
+            # 静默处理剪贴板错误，避免控制台窗口
+            pass
 
     def bilibili_qrcode_login(self):
 
@@ -718,6 +808,9 @@ class BilibiliAudioExtractorGUI:
                     link_text.insert(tk.END, qrcode_data)
                     link_text.config(state='normal')  # 允许选择和复制
 
+                    # 为二维码链接文本框添加右键菜单
+                    self.context_menu(link_text)
+
                     # 添加复制按钮
                     copy_btn = tk.Button(text_frame, text="复制链接",
                                        command=lambda: self._copy_to_clipboard(qrcode_data),
@@ -762,11 +855,12 @@ class BilibiliAudioExtractorGUI:
                                 if hasattr(self, '_qrcode_text_frame'):
                                     self._qrcode_text_frame.pack_forget()
 
-                                print("✓ 使用本地qrcode库生成二维码成功")
+                                # 本地qrcode生成成功，静默处理
                                 return
 
-                            except Exception as local_error:
-                                print(f"本地qrcode生成失败，尝试外部API: {local_error}")
+                            except Exception:
+                                # 本地qrcode生成失败，使用外部API
+                                pass
 
                         # 如果本地qrcode不可用或失败，尝试外部API
                         qrcode_url = f"https://api.qrserver.com/v1/create-qr-code/?size=280x280&data={urllib.parse.quote(qrcode_data)}"
@@ -797,11 +891,11 @@ class BilibiliAudioExtractorGUI:
                         if hasattr(self, '_qrcode_text_frame'):
                             self._qrcode_text_frame.pack_forget()
 
-                        print("✓ 使用外部API生成二维码成功")
+                        # 外部API生成成功，静默处理
 
-                    except Exception as img_error:
+                    except Exception:
                         # 如果所有方法都失败，显示文字和链接
-                        print(f"二维码图片生成失败，使用文字显示: {img_error}")
+                        # 二维码图片生成失败，使用文字显示
                         qrcode_label.config(text=qrcode_text, justify='center')
                         # 确保文本区域可见
                         if hasattr(self, '_qrcode_text_frame'):
@@ -1148,7 +1242,8 @@ class BilibiliAudioExtractorGUI:
 
             cmd = ['yt-dlp', '--dump-json', '--no-playlist', url]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+            startupinfo = get_startup_info()
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
 
 
             if result.returncode != 0:
@@ -1409,7 +1504,8 @@ class BilibiliAudioExtractorGUI:
             cmd.append(url)
 
 
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+            startupinfo = get_startup_info()
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
 
             if result.returncode != 0:
                 stderr_output = result.stderr if result.stderr else ''
@@ -1506,8 +1602,8 @@ class BilibiliAudioExtractorGUI:
                 ]
 
 
-                result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
-
+                startupinfo = get_startup_info()
+                result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
 
                 if result.returncode != 0:
 
@@ -1725,9 +1821,9 @@ class BilibiliAudioExtractorGUI:
 
                 self.save_config('output_dir', current_dir)
 
-        except Exception as e:
-
-            print(f"保存设置失败: {e}")
+        except Exception:
+            # 静默处理保存设置错误
+            pass
 
 
 def main():

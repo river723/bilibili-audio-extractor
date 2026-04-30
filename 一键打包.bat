@@ -67,7 +67,7 @@ if "%MODE%"=="install" (
     echo.
 
     REM 仅安装模式
-    python build_package.py install
+    cd /d "%~dp0" && python build_package.py install
 
     if errorlevel 1 (
         echo.
@@ -132,7 +132,7 @@ if "%MODE%"=="install" (
     echo.
 
     REM 完整打包模式
-    python build_package.py
+    cd /d "%~dp0" && python build_package.py
 
     if errorlevel 1 (
         echo.
@@ -140,7 +140,7 @@ if "%MODE%"=="install" (
         pause
         exit /b 1
     )
-
+ 
     echo.
     echo ====================================================
     echo [成功] 打包完成!

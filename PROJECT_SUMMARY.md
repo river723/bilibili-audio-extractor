@@ -54,10 +54,10 @@
 ## 📋 安装包内容
 
 构建完成后，`output/` 目录将包含：
-- `Bilibili_Audio_Extractor_v2.1.0_Portable.zip` - 完整安装包
+- `Bilibili_Audio_Extractor_v2.3.0_Portable.zip` - 完整安装包
 
 解压后包含：
-- `B站音频提取器.exe` - 主程序
+- `B站音频提取器.exe` - 主程序（可直接双击运行）
 - `启动程序.bat` - 启动脚本
 - `you-get/` - 视频下载库
 - `使用说明.txt` - 详细文档

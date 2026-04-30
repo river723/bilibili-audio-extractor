@@ -25,6 +25,7 @@
 1. 📖 阅读 `PROJECT_SUMMARY.md` 了解项目
 2. 🎯 双击 `一键打包.bat` 开始
 3. 📦 在 `output/` 目录获取安装包
+4. 🎵 双击 `B站音频提取器.exe` 开始使用
 
 ### 开发者
 1. 🔧 查看 `UNIFIED_INSTALLATION.md` 技术细节
@@ -76,7 +77,7 @@ python verify_installation.py
 | 文件 | 大小 | 用途 |
 |------|------|------|
 | **`verify_installation.py`** | 5.8 KB | ✅ 安装验证测试脚本 |
-| **`gui_extractor_enhanced.py`** | 27.2 KB | 🔧 增强版提取器，支持多种音频质量选择 |
+| **`gui_extractor_simple.py`** | 42.5 KB | 🎯 精简版B站音频提取器，支持最高音质提取 |
 
 ### 配置文件（1个）
 
@@ -125,7 +126,7 @@ A: 运行 `python verify_installation.py`
 
 ## 🎉 项目信息
 
-- **版本**: v2.1.0
+- **版本**: v2.3.0
 - **状态**: ✅ 100% 完成
 - **构建成功率**: 100%
 - **最后更新**: 2026年4月16日

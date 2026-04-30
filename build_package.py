@@ -21,7 +21,7 @@ class UnifiedInstaller:
         self.project_dir = Path(__file__).parent
         self.build_dir = self.project_dir / "build"
         self.output_dir = self.project_dir / "output"
-        self.version = "2.1.0"
+        self.version = "2.3.0"
         self.app_name = "B站音频提取器"
         self.log_file = Path.home() / ".bilibili_audio_extractor" / "install_log.txt"
         self.log_file.parent.mkdir(exist_ok=True)
@@ -250,10 +250,15 @@ class PackageBuilder(UnifiedInstaller):
             'pyinstaller',
             '--onefile',
             '--windowed',
+            '--noconsole',  # 完全禁止控制台窗口
+            '--disable-windowed-traceback',  # 禁用窗口化模式的跟踪回溯
             f'--name={self.app_name}',
             '--distpath', str(self.build_dir),
             '--workpath', str(self.build_dir / "temp"),
-            'gui_extractor_enhanced.py'
+            '--clean',  # 清理临时文件
+            '--hidden-import=you_get',  # 显式包含you-get模块
+            '--collect-submodules=you_get',  # 收集所有子模块
+            'gui_extractor_simple.py'
         ]
 
         try:
@@ -292,44 +297,9 @@ class PackageBuilder(UnifiedInstaller):
             return False
 
     def create_launch_script(self):
-        """创建启动脚本"""
-        print("\n创建启动脚本...")
-
-        script = """@echo off
-REM Bilibili Audio Extractor Launch Script
-setlocal
-
-REM 设置环境变量
-set PYTHONPATH=%~dp0you-get;%PYTHONPATH%
-
-REM 检查FFmpeg
-where ffmpeg >nul 2>&1
-if %errorlevel% neq 0 (
-    echo FFmpeg未找到!
-    echo 请下载FFmpeg并添加到系统PATH
-    echo 下载地址: https://www.gyan.dev/ffmpeg/builds/
-    pause
-    exit /b 1
-)
-
-echo Starting Bilibili Audio Extractor...
-
-REM Launch program
-"%~dp0B站音频提取器.exe"
-
-if %errorlevel% neq 0 (
-    echo 程序启动失败
-    pause
-    exit /b 1
-)
-
-endlocal
-"""
-
-        with open(self.build_dir / "启动程序.bat", 'w', encoding='gbk') as f:
-            f.write(script)
-
-        print("[OK] 启动脚本创建成功")
+        """创建启动脚本（简化版，不再需要）"""
+        print("\n跳过启动脚本创建（EXE可直接运行）...")
+        print("[OK] EXE文件现在可以直接运行，无需启动脚本")
         return True
 
     def create_readme(self):
@@ -346,10 +316,11 @@ endlocal
 - 本地二维码生成（已预装qrcode库）
 - 配置记忆功能
 - 视频文件保留选项
+- 🎯 一键运行（EXE可直接双击）
 
 快速开始
 --------
-1. 运行 "启动程序.bat"
+1. 双击 "B站音频提取器.exe"
 2. 输入B站视频链接
 3. 点击"开始提取音频"
 
@@ -361,7 +332,7 @@ endlocal
    - 解压并将ffmpeg.exe添加到系统PATH
 
 2. 运行程序:
-   - 双击 "启动程序.bat"
+   - 直接双击 "B站音频提取器.exe"
    - 等待程序启动
 
 使用方法
@@ -428,6 +399,13 @@ A: 在设置的输出目录中，文件名基于视频标题
         if spec_file.exists():
             spec_file.unlink()
 
+        # 清理build目录中的旧文件（除了EXE和说明文档）
+        if self.build_dir.exists():
+            for item in self.build_dir.iterdir():
+                if item.is_file() and item.suffix in ['.bat', '.vbs']:
+                    item.unlink()
+                    print(f"清理旧文件: {item.name}")
+
         print("[OK] 清理完成")
 
     def build_package(self):
@@ -448,7 +426,7 @@ A: 在设置的输出目录中，文件名基于视频标题
         steps = [
             ("创建可执行文件", self.create_exe),
             ("创建you-get捆绑包", self.create_youget_bundle),
-            ("创建启动脚本", self.create_launch_script),
+            ("跳过启动脚本创建", self.create_launch_script),
             ("创建说明文档", self.create_readme),
             ("创建安装包", self.create_package)
         ]

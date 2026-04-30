@@ -18,7 +18,7 @@ bilibili-audio-extractor/
 │
 ├── 🛠 辅助工具
 │   ├── verify_installation.py    # 安装验证
-│   ├── gui_extractor_enhanced.py # 增强版程序
+│   └── verify_installation.py    # 安装验证
 │   └── build_package.bat         # 备用构建脚本
 │
 ├── 📋 配置文件
@@ -27,7 +27,7 @@ bilibili-audio-extractor/
 │   └── LICENSE                   # 开源协议
 │
 └── 📄 其他
-    └── bilibili_audio_extractor.py # 基础版程序
+    └── requirements.txt          # Python依赖
 ```
 
 ## 🚀 上传到GitHub步骤
@@ -132,8 +132,8 @@ jobs:
 1. 在GitHub仓库页面，点击 "Releases"
 2. 点击 "Create a new release"
 3. 填写发布信息：
-   - **Tag version**: `v2.1.0`
-   - **Release title**: `B站音频提取器 v2.1.0 - 统一安装方案`
+   - **Tag version**: `v2.3.0`
+   - **Release title**: `B站音频提取器 v2.3.0 - 统一安装方案`
    - **Description**: 
      ```
      ## 🎉 主要特性
@@ -161,7 +161,7 @@ jobs:
 python build_package.py
 
 # 将生成的ZIP文件上传到Release
-# output/Bilibili_Audio_Extractor_v2.1.0_Portable.zip
+# output/Bilibili_Audio_Extractor_v2.3.0_Portable.zip
 ```
 
 ## 📊 项目统计信息
