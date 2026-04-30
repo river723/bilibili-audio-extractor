@@ -170,7 +170,7 @@ class BilibiliAudioExtractorGUI:
 
         self.root.title("B站音频提取器")
 
-        self.root.geometry("600x700")
+        self.root.geometry("600x720")
 
         self.root.minsize(500, 500)
 
@@ -423,15 +423,19 @@ class BilibiliAudioExtractorGUI:
             maximum=100,
             mode='determinate'
         )
-
-        # 使用place来精确控制高度
-        self.progress_bar.place(x=0, y=0, relwidth=1.0, height=2)
+        self.progress_bar.pack(fill=tk.X, side=tk.LEFT, expand=True)
 
         # 美化进度条样式
         style = ttk.Style()
         style.theme_use('clam')
         style.configure('Thin.Horizontal.TProgressbar',
                        background=GlassTheme.get_color('primary'),
+                       troughcolor='white',
+                       borderwidth=0,
+                       thickness=1,
+                       relief='flat')
+        style.configure('ThinPulse.Horizontal.TProgressbar',
+                       background=GlassTheme.get_color('primary_light'),
                        troughcolor='white',
                        borderwidth=0,
                        thickness=2,
