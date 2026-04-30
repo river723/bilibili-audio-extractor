@@ -41,6 +41,126 @@ from PIL import Image, ImageTk
 import qrcode
 
 
+# 玻璃态主题样式系统
+class GlassTheme:
+    """高端大气玻璃态主题"""
+
+    # 色彩系统 (使用十六进制格式，因为Tkinter不支持rgba字符串)
+    COLORS = {
+        'bg_primary': '#f8f9fa',      # 主背景
+        'bg_secondary': '#eef2f7',    # 次背景
+        'card_bg': '#ffffff',         # 卡片背景 (纯白，通过Frame透明度模拟玻璃效果)
+        'primary': '#ff6699',         # 主色 - B站粉
+        'primary_light': '#ff8fab',   # 浅色主色
+        'primary_dark': '#ff3388',    # 深色主色
+        'accent_blue': '#4a90e2',     # 科技蓝
+        'accent_green': '#52c41a',    # 成功绿
+        'accent_red': '#ff4d4f',      # 错误红
+        'text_primary': '#1a1a1a',    # 主文本
+        'text_secondary': '#595959',  # 次文本
+        'text_hint': '#8c8c8c',       # 提示文本
+        'border': '#e0e0e0',          # 边框 (浅灰色)
+        'shadow': '#e8e8e8',          # 阴影 (浅灰色)
+        'glass_highlight': '#ffffff',  # 玻璃高光
+    }
+
+    # 字体系统
+    FONTS = {
+        'title': ('微软雅黑', 18, 'bold'),
+        'subtitle': ('微软雅黑', 12, 'normal'),
+        'heading': ('微软雅黑', 11, 'bold'),
+        'body': ('微软雅黑', 9, 'normal'),
+        'caption': ('微软雅黑', 8, 'normal'),
+        'code': ('Consolas', 8, 'normal'),
+    }
+
+    # 阴影系统
+    SHADOWS = {
+        'card': '0 4px 20px rgba(0, 0, 0, 0.08)',
+        'button': '0 2px 8px rgba(0, 0, 0, 0.12)',
+        'button_hover': '0 4px 16px rgba(0, 0, 0, 0.16)',
+        'input': '0 2px 6px rgba(0, 0, 0, 0.06)',
+    }
+
+    # 圆角半径
+    RADIUS = {
+        'card': 16,
+        'button': 8,
+        'input': 6,
+        'progress': 4,
+    }
+
+    @classmethod
+    def get_color(cls, key):
+        """获取颜色值"""
+        return cls.COLORS.get(key, '#000000')
+
+    @classmethod
+    def get_font(cls, key):
+        """获取字体配置"""
+        return cls.FONTS.get(key, ('Arial', 10))
+
+    @classmethod
+    def get_shadow(cls, key):
+        """获取阴影配置"""
+        return cls.SHADOWS.get(key, '0 0 0 rgba(0, 0, 0, 0)')
+
+    @classmethod
+    def get_radius(cls, key):
+        """获取圆角半径"""
+        return cls.RADIUS.get(key, 0)
+
+
+def create_glass_card(parent, **kwargs):
+    """创建玻璃态卡片容器"""
+    card = tk.Frame(
+        parent,
+        bg=GlassTheme.get_color('card_bg'),
+        highlightbackground=GlassTheme.get_color('border'),
+        highlightthickness=1,
+        bd=0,
+        **kwargs
+    )
+
+    # 添加阴影效果（通过place实现）
+    def add_shadow():
+        try:
+            x = card.winfo_x()
+            y = card.winfo_y()
+            width = card.winfo_width()
+            height = card.winfo_height()
+
+            if width > 0 and height > 0:
+                # 创建阴影画布
+                shadow = tk.Canvas(
+                    parent,
+                    width=width + 20,
+                    height=height + 20,
+                    bg=GlassTheme.get_color('bg_primary'),
+                    highlightthickness=0,
+                    bd=0
+                )
+                shadow.place(x=x - 10, y=y - 10)
+
+                # 绘制渐变阴影
+                shadow_color = GlassTheme.get_color('shadow')
+                for i in range(10):
+                    alpha = int(255 * (1 - i / 10) * 0.3)
+                    color = f'#{alpha:02x}{alpha:02x}{alpha:02x}'
+                    shadow.create_oval(
+                        10 - i, 10 - i, width + 10 + i, height + 10 + i,
+                        fill=color, outline=color
+                    )
+
+                # 将卡片移到最上层
+                card.lift()
+        except:
+            pass
+
+    card.bind('<Configure>', lambda e: add_shadow())
+    return card
+
+
 
 class BilibiliAudioExtractorGUI:
 
@@ -48,11 +168,18 @@ class BilibiliAudioExtractorGUI:
 
         self.root = root
 
-        self.root.title("B站音频提取器 - 精简版")
+        self.root.title("B站音频提取器 - 玻璃态主题版")
 
-        self.root.geometry("550x600")
+        self.root.geometry("550x580")
 
-        self.root.minsize(500, 450)
+        self.root.minsize(500, 500)
+
+        # 设置窗口背景
+        self.root.configure(bg=GlassTheme.get_color('bg_primary'))
+
+        # 添加窗口动画效果
+        self.root.attributes('-alpha', 0.0)  # 初始透明
+        self._fade_in_animation()
 
 
         # 配置文件路径
@@ -92,217 +219,271 @@ class BilibiliAudioExtractorGUI:
         self.check_dependencies()
 
 
+    def _fade_in_animation(self):
+        """窗口淡入动画"""
+        current_alpha = self.root.attributes('-alpha')
+        if current_alpha < 1.0:
+            new_alpha = min(current_alpha + 0.1, 1.0)
+            self.root.attributes('-alpha', new_alpha)
+            self.root.after(50, self._fade_in_animation)
+
+    def _create_glass_card(self, parent, **kwargs):
+        """创建玻璃态卡片，返回(外容器, 内容容器)"""
+        # 创建外容器用于阴影效果
+        outer_frame = tk.Frame(parent, bg=GlassTheme.get_color('bg_primary'))
+
+        # 创建卡片主体
+        card = tk.Frame(
+            outer_frame,
+            bg=GlassTheme.get_color('card_bg'),
+            highlightbackground='#e0e0e0',
+            highlightthickness=1,
+            bd=0,
+            relief='flat',
+            **kwargs
+        )
+
+        # 使用pack布局
+        card.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+        return outer_frame, card
+
+    def _on_button_hover(self, button, hovering):
+        """按钮悬停效果"""
+        if hovering:
+            button.configure(bg=GlassTheme.get_color('primary_light'))
+        else:
+            button.configure(bg=GlassTheme.get_color('accent_blue'))
+
+    def _animate_button_press(self, button, pressing):
+        """按钮按压缩放动画"""
+        if pressing:
+            button.configure(relief='sunken')
+        else:
+            button.configure(relief='flat')
+
     def setup_ui(self):
 
         """设置用户界面"""
 
-        # 标题
-
-        title_label = tk.Label(
-
+        # 主容器
+        main_container = tk.Frame(
             self.root,
-
-            text="B站音频提取器 - 精简版",
-
-            font=('微软雅黑', 16, 'bold'),
-
-            pady=15
-
+            bg=GlassTheme.get_color('bg_primary')
         )
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        title_label.pack()
+        # 标题区域容器
+        title_container = tk.Frame(
+            main_container,
+            bg=GlassTheme.get_color('bg_primary')
+        )
+        title_container.pack(fill=tk.X, pady=(0, 10))
 
+        # 主标题 - 居左下
+        title_label = tk.Label(
+            title_container,
+            text="B站音频提取器",
+            font=GlassTheme.get_font('title'),
+            fg=GlassTheme.get_color('text_primary'),
+            bg=GlassTheme.get_color('bg_primary')
+        )
+        title_label.pack(side=tk.LEFT, anchor='s')
 
-        # URL输入区域
+        # 副标题 - 居右下
+        subtitle_label = tk.Label(
+            title_container,
+            text="最高音质提取",
+            font=GlassTheme.get_font('caption'),
+            fg=GlassTheme.get_color('text_hint'),
+            bg=GlassTheme.get_color('bg_primary')
+        )
+        subtitle_label.pack(side=tk.RIGHT, anchor='s')
 
-        url_frame = tk.LabelFrame(self.root, text="B站视频链接", padx=15, pady=10)
+        # URL输入区域 - 玻璃态卡片
+        url_card_outer, url_card = self._create_glass_card(main_container)
+        url_card_outer.pack(fill=tk.X, pady=(0, 20))
+        url_card.pack_propagate(True)  # 自动调整大小
+       
 
-        url_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
+        url_frame = tk.Frame(url_card, bg=GlassTheme.get_color('card_bg'))
+        url_frame.pack(fill=tk.X, padx=20, pady=15)
 
+        tk.Label(url_frame, text="视频URL:", font=GlassTheme.get_font('body'),
+                fg=GlassTheme.get_color('text_primary'), bg=GlassTheme.get_color('card_bg'),
+                anchor="w").pack(fill=tk.X, pady=(0, 8))
 
-        tk.Label(url_frame, text="视频URL:", anchor="w").pack(fill=tk.X, pady=(0, 5))
-
-        url_entry = tk.Entry(url_frame, textvariable=self.url_var, font=('Arial', 10))
-
-        url_entry.pack(fill=tk.X, pady=(0, 5))
-
+        url_entry = tk.Entry(url_frame, textvariable=self.url_var, font=GlassTheme.get_font('body'),
+                           bg='white', fg=GlassTheme.get_color('text_primary'),
+                           relief='flat', bd=1, highlightbackground=GlassTheme.get_color('border'),
+                           highlightthickness=1)
+        url_entry.pack(fill=tk.X, pady=(0, 8))
 
         example_url = "https://www.bilibili.com/video/BV1Hs4y1B7T2"
-
-        tk.Label(url_frame, text=f"示例: {example_url}", fg="gray", anchor="w").pack(fill=tk.X)
-
-
-        # 输出目录选择
-
-        dir_frame = tk.LabelFrame(self.root, text="输出设置", padx=15, pady=10)
-
-        dir_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
+        tk.Label(url_frame, text=f"示例: {example_url}", font=GlassTheme.get_font('caption'),
+                fg=GlassTheme.get_color('text_hint'), bg=GlassTheme.get_color('card_bg'),
+                anchor="w").pack(fill=tk.X)
 
 
-        tk.Label(dir_frame, text="保存目录:", anchor="w").pack(fill=tk.X, pady=(0, 5))
+        # 输出目录选择 - 玻璃态卡片
+        dir_card_outer, dir_card = self._create_glass_card(main_container)
+        dir_card_outer.pack(fill=tk.X, pady=(0, 20))
+        dir_card.pack_propagate(True)
 
+        dir_frame = tk.Frame(dir_card, bg=GlassTheme.get_color('card_bg'))
+        dir_frame.pack(fill=tk.X, padx=20, pady=15)
 
-        dir_entry_frame = tk.Frame(dir_frame)
+        tk.Label(dir_frame, text="保存目录:", font=GlassTheme.get_font('body'),
+                fg=GlassTheme.get_color('text_primary'), bg=GlassTheme.get_color('card_bg'),
+                anchor="w").pack(fill=tk.X, pady=(0, 8))
 
-        dir_entry_frame.pack(fill=tk.X, pady=(0, 5))
+        dir_entry_frame = tk.Frame(dir_frame, bg=GlassTheme.get_color('card_bg'))
+        dir_entry_frame.pack(fill=tk.X, pady=(0, 8))
 
+        dir_entry = tk.Entry(dir_entry_frame, textvariable=self.output_dir_var,
+                           font=GlassTheme.get_font('body'), bg='white',
+                           fg=GlassTheme.get_color('text_primary'), relief='flat',
+                           bd=1, highlightbackground=GlassTheme.get_color('border'),
+                           highlightthickness=1)
+        dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
 
-        dir_entry = tk.Entry(dir_entry_frame, textvariable=self.output_dir_var, font=('Arial', 10))
-
-        dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-
-
-        browse_btn = tk.Button(
-
-            dir_entry_frame,
-
-            text="浏览",
-
-            command=self.browse_directory,
-
-            width=8,
-
-            bg='#2196F3',
-
-            fg='white'
-
-        )
-
+        browse_btn = tk.Button(dir_entry_frame, text="浏览",
+                             command=self.browse_directory, width=10,
+                             font=GlassTheme.get_font('body'),
+                             bg=GlassTheme.get_color('accent_blue'),
+                             fg='white', relief='flat', bd=0,
+                             activebackground=GlassTheme.get_color('primary'),
+                             activeforeground='white',
+                             cursor='hand2')
         browse_btn.pack(side=tk.RIGHT)
 
+        # 添加按钮悬停效果
+        browse_btn.bind('<Enter>', lambda e: self._on_button_hover(browse_btn, True))
+        browse_btn.bind('<Leave>', lambda e: self._on_button_hover(browse_btn, False))
 
 
+        # 按钮区域 - 玻璃态卡片
+        button_card_outer, button_card = self._create_glass_card(main_container)
+        button_card_outer.pack(fill=tk.X, pady=(0, 20))
+        button_card.pack_propagate(True)
 
-        # 进度条
+        button_frame = tk.Frame(button_card, bg=GlassTheme.get_color('card_bg'))
+        button_frame.pack(fill=tk.X, padx=20, pady=15)
 
-        progress_frame = tk.LabelFrame(self.root, text="处理进度", padx=15, pady=10)
+        # 按钮样式函数
+        def create_glass_button(parent, text, command, color_key, width=12):
+            btn = tk.Button(parent, text=text, command=command,
+                           font=GlassTheme.get_font('body'),
+                           bg=GlassTheme.get_color(color_key),
+                           fg='white', relief='flat', bd=0,
+                           activebackground=GlassTheme.get_color('primary_dark'),
+                           activeforeground='white',
+                           width=width, height=2,
+                           cursor='hand2')
+            btn.bind('<Enter>', lambda e: self._on_button_hover(btn, True))
+            btn.bind('<Leave>', lambda e: self._on_button_hover(btn, False))
+            btn.bind('<Button-1>', lambda e: self._animate_button_press(btn, True))
+            btn.bind('<ButtonRelease-1>', lambda e: self._animate_button_press(btn, False))
+            return btn
 
-        progress_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
+        self.extract_btn = create_glass_button(button_frame, "开始提取",
+                                              self.start_extraction, 'primary', 10)
+        self.extract_btn.pack(side=tk.LEFT, padx=(0, 12))
 
-
-        self.progress_bar = ttk.Progressbar(
-
-            progress_frame,
-
-            variable=self.progress_var,
-
-            maximum=100,
-
-            mode='determinate'
-
-        )
-
-        self.progress_bar.pack(fill=tk.X, pady=(0, 5))
-
-
-        self.status_label = tk.Label(progress_frame, textvariable=self.status_var, anchor="w")
-
-        self.status_label.pack(fill=tk.X)
-
-
-        # 按钮区域
-
-        button_frame = tk.Frame(self.root, pady=10)
-
-        button_frame.pack()
-
-
-        self.extract_btn = tk.Button(
-
-            button_frame,
-
-            text="开始提取音频",
-
-            command=self.start_extraction,
-
-            bg='#4CAF50',
-
-            fg='white',
-
-            font=('微软雅黑', 10, 'bold'),
-
-            width=15,
-
-            height=2
-
-        )
-
-        self.extract_btn.pack(side=tk.LEFT, padx=(0, 10))
-
-
-        self.test_btn = tk.Button(
-
-            button_frame,
-
-            text="测试依赖",
-
-            command=self.test_dependencies,
-
-            bg='#2196F3',
-
-            fg='white',
-
-            font=('微软雅黑', 10),
-
-            width=10,
-
-            height=2
-
-        )
-
-        self.test_btn.pack(side=tk.LEFT, padx=(0, 10))
-
+        self.test_btn = create_glass_button(button_frame, "测试依赖",
+                                           self.test_dependencies, 'accent_blue', 10)
+        self.test_btn.pack(side=tk.LEFT, padx=(0, 12))
 
         # B站登录状态按钮
+        self.login_btn = create_glass_button(button_frame, "B站登录",
+                                            self.bilibili_qrcode_login, 'accent_green', 12)
+        self.login_btn.pack(side=tk.LEFT)
 
-        self.login_btn = tk.Button(
 
-            button_frame,
+        # 进度和日志合并区域 - 玻璃态卡片
+        log_card_outer, log_card = self._create_glass_card(main_container)
+        log_card_outer.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        log_card.pack_propagate(False)
 
-            text="B站登录",
+        # 进度条区域（在按钮下方）
+        progress_frame = tk.Frame(log_card, bg=GlassTheme.get_color('card_bg'))
+        progress_frame.pack(fill=tk.X, padx=20, pady=(15, 10))
 
-            command=self.bilibili_qrcode_login,  # 直接调用二维码登录
+        tk.Label(progress_frame, text="处理进度:", font=GlassTheme.get_font('body'),
+                fg=GlassTheme.get_color('text_primary'), bg=GlassTheme.get_color('card_bg'),
+                anchor="w").pack(fill=tk.X, pady=(0, 8))
 
-            bg='#FF9800',
+        # 进度条容器
+        progress_container = tk.Frame(progress_frame, bg=GlassTheme.get_color('card_bg'))
+        progress_container.pack(fill=tk.X, pady=(0, 8))
 
-            fg='white',
-
-            font=('微软雅黑', 10),
-
-            width=12,
-
-            height=2
-
+        self.progress_bar = ttk.Progressbar(
+            progress_container,
+            variable=self.progress_var,
+            maximum=100,
+            mode='determinate'
         )
+        self.progress_bar.pack(fill=tk.X, side=tk.LEFT, expand=True)
 
-        self.login_btn.pack(side=tk.LEFT, padx=(0, 10))
+        # 美化进度条样式
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('Glass.Horizontal.TProgressbar',
+                       background=GlassTheme.get_color('primary'),
+                       troughcolor='white',
+                       borderwidth=0,
+                       thickness=2,
+                       relief='flat')
+        style.configure('Pulse.Horizontal.TProgressbar',
+                       background=GlassTheme.get_color('primary_light'),
+                       troughcolor='white',
+                       borderwidth=0,
+                       thickness=2,
+                       relief='flat')
+        self.progress_bar.configure(style='Glass.Horizontal.TProgressbar')
 
+        # 添加进度百分比标签
+        self.progress_label = tk.Label(progress_container, text="0%",
+                                     font=GlassTheme.get_font('caption'),
+                                     fg=GlassTheme.get_color('primary'),
+                                     bg=GlassTheme.get_color('card_bg'),
+                                     width=6)
+        self.progress_label.pack(side=tk.RIGHT, padx=(10, 0))
 
         # 日志区域
+        log_frame = tk.Frame(log_card, bg=GlassTheme.get_color('card_bg'))
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 15))
 
-        log_frame = tk.LabelFrame(self.root, text="处理日志", padx=10, pady=10)
+        tk.Label(log_frame, text="处理日志:", font=GlassTheme.get_font('body'),
+                fg=GlassTheme.get_color('text_primary'), bg=GlassTheme.get_color('card_bg'),
+                anchor="w").pack(fill=tk.X, pady=(0, 8))
 
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 10))
-
+        # 日志文本区域容器
+        log_container = tk.Frame(log_frame, bg=GlassTheme.get_color('card_bg'))
+        log_container.pack(fill=tk.BOTH, expand=True)
 
         self.log_text = scrolledtext.ScrolledText(
-
-            log_frame,
-
+            log_container,
             height=10,
-
             wrap=tk.WORD,
-
-            font=('Consolas', 9)
-
+            font=GlassTheme.get_font('code'),
+            bg='#f8f9fa',
+            fg=GlassTheme.get_color('text_primary'),
+            relief='flat',
+            bd=1,
+            highlightbackground=GlassTheme.get_color('border'),
+            highlightthickness=1
         )
+        self.log_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
 
-        self.log_text.pack(fill=tk.BOTH, expand=True)
-
+        # 滚动条美化需要特殊处理，暂时注释掉
+        # log_scrollbar = self.log_text.master.nametowidget(self.log_text.cget('yscrollcommand').split()[0])
+        # log_scrollbar.configure(bg=GlassTheme.get_color('card_bg'),
+        #                        troughcolor=GlassTheme.get_color('card_bg'),
+        #                        relief='flat')
 
         # 绑定回车键
-
-        self.root.bind('<Return>', lambda e: self.start_extraction())
+        self.root.bind('<Return>', lambda event: self.start_extraction())
 
 
     def check_dependencies(self):
@@ -881,11 +1062,35 @@ class BilibiliAudioExtractorGUI:
 
         """添加日志消息"""
 
-        self.log_text.insert(tk.END, f"{message}\n")
+        # 根据消息类型添加颜色
+        if message.startswith('✓'):
+            self.log_text.insert(tk.END, f"{message}\n")
+            self.log_text.tag_configure('success', foreground=GlassTheme.get_color('accent_green'))
+            self.log_text.tag_add('success', 'end-2c linestart', 'end-2c lineend')
+        elif message.startswith('❌') or message.startswith('✗'):
+            self.log_text.insert(tk.END, f"{message}\n")
+            self.log_text.tag_configure('error', foreground=GlassTheme.get_color('accent_red'))
+            self.log_text.tag_add('error', 'end-2c linestart', 'end-2c lineend')
+        elif message.startswith('⚠'):
+            self.log_text.insert(tk.END, f"{message}\n")
+            self.log_text.tag_configure('warning', foreground=GlassTheme.get_color('primary'))
+            self.log_text.tag_add('warning', 'end-2c linestart', 'end-2c lineend')
+        else:
+            self.log_text.insert(tk.END, f"{message}\n")
 
         self.log_text.see(tk.END)
 
         self.root.update_idletasks()
+
+    def _animate_progress(self):
+        """进度条动画效果"""
+        current_value = self.progress_var.get()
+        if current_value > 0 and self.is_processing:
+            # 添加脉冲效果
+            pulse = 1 + 0.02 * (1 + (time.time() * 10) % 1)
+            self.progress_bar.configure(style='Pulse.Horizontal.TProgressbar')
+        else:
+            self.progress_bar.configure(style='Glass.Horizontal.TProgressbar')
 
 
     def update_progress(self, progress, status):
@@ -896,7 +1101,38 @@ class BilibiliAudioExtractorGUI:
 
         self.status_var.set(status)
 
+        self.progress_label.config(text=f"{int(progress)}%")
+
+
+        # 根据进度更新颜色
+        if progress == 100:
+            self.progress_label.config(fg=GlassTheme.get_color('accent_green'))
+        elif progress > 0:
+            self.progress_label.config(fg=GlassTheme.get_color('primary'))
+        else:
+            self.progress_label.config(fg=GlassTheme.get_color('text_secondary'))
+
         self.root.update_idletasks()
+
+    def _on_button_hover(self, button, hovering):
+
+        """按钮悬停效果"""
+
+        if hovering:
+
+            button.configure(bg=GlassTheme.get_color('primary_light'))
+
+        else:
+
+            # 恢复原始颜色，根据按钮类型
+            if button == self.extract_btn:
+                button.configure(bg=GlassTheme.get_color('primary'))
+            elif button == self.test_btn:
+                button.configure(bg=GlassTheme.get_color('accent_blue'))
+            elif button == self.login_btn:
+                button.configure(bg=GlassTheme.get_color('accent_green'))
+            else:
+                button.configure(bg=GlassTheme.get_color('accent_blue'))
 
 
     def get_highest_quality_url(self, url):
@@ -1394,9 +1630,41 @@ class BilibiliAudioExtractorGUI:
         self.log_message(f"输出目录: {output_dir}")
 
 
+        # 启动动画效果
+        self._start_processing_animation()
+
         thread = threading.Thread(target=self.extract_audio_thread, daemon=True)
 
         thread.start()
+
+    def _start_processing_animation(self):
+        """启动处理中的动画效果"""
+        self._animate_pulse()
+
+    def _animate_pulse(self):
+        """脉冲动画效果"""
+        if self.is_processing:
+            # 让进度条轻微脉冲
+            current_value = self.progress_var.get()
+            pulse_value = current_value + 0.5
+            if pulse_value > 100:
+                pulse_value = current_value
+            self.progress_var.set(pulse_value)
+
+            # 状态文字闪烁
+            if self.status_var.get() == "处理中...":
+                self.status_label.config(fg=GlassTheme.get_color('primary'))
+            else:
+                self.status_label.config(fg=GlassTheme.get_color('text_secondary'))
+
+            self.root.after(200, self._animate_pulse)
+
+    def _animate_button_press(self, button, pressing):
+        """按钮按压缩放动画"""
+        if pressing:
+            button.configure(relief='sunken')
+        else:
+            button.configure(relief='flat')
 
 
     def load_config(self):
