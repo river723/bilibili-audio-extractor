@@ -168,9 +168,9 @@ class BilibiliAudioExtractorGUI:
 
         self.root = root
 
-        self.root.title("B站音频提取器 - 玻璃态主题版")
+        self.root.title("B站音频提取器")
 
-        self.root.geometry("550x580")
+        self.root.geometry("600x700")
 
         self.root.minsize(500, 500)
 
@@ -387,11 +387,11 @@ class BilibiliAudioExtractorGUI:
             return btn
 
         self.extract_btn = create_glass_button(button_frame, "开始提取",
-                                              self.start_extraction, 'primary', 10)
+                                              self.start_extraction, 'primary', 12)
         self.extract_btn.pack(side=tk.LEFT, padx=(0, 12))
 
         self.test_btn = create_glass_button(button_frame, "测试依赖",
-                                           self.test_dependencies, 'accent_blue', 10)
+                                           self.test_dependencies, 'accent_blue', 12)
         self.test_btn.pack(side=tk.LEFT, padx=(0, 12))
 
         # B站登录状态按钮
@@ -423,24 +423,20 @@ class BilibiliAudioExtractorGUI:
             maximum=100,
             mode='determinate'
         )
-        self.progress_bar.pack(fill=tk.X, side=tk.LEFT, expand=True)
+
+        # 使用place来精确控制高度
+        self.progress_bar.place(x=0, y=0, relwidth=1.0, height=2)
 
         # 美化进度条样式
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure('Glass.Horizontal.TProgressbar',
+        style.configure('Thin.Horizontal.TProgressbar',
                        background=GlassTheme.get_color('primary'),
                        troughcolor='white',
                        borderwidth=0,
                        thickness=2,
                        relief='flat')
-        style.configure('Pulse.Horizontal.TProgressbar',
-                       background=GlassTheme.get_color('primary_light'),
-                       troughcolor='white',
-                       borderwidth=0,
-                       thickness=2,
-                       relief='flat')
-        self.progress_bar.configure(style='Glass.Horizontal.TProgressbar')
+        self.progress_bar.configure(style='Thin.Horizontal.TProgressbar')
 
         # 添加进度百分比标签
         self.progress_label = tk.Label(progress_container, text="0%",
@@ -454,9 +450,9 @@ class BilibiliAudioExtractorGUI:
         log_frame = tk.Frame(log_card, bg=GlassTheme.get_color('card_bg'))
         log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 15))
 
-        tk.Label(log_frame, text="处理日志:", font=GlassTheme.get_font('body'),
-                fg=GlassTheme.get_color('text_primary'), bg=GlassTheme.get_color('card_bg'),
-                anchor="w").pack(fill=tk.X, pady=(0, 8))
+        # tk.Label(log_frame, text="处理日志:", font=GlassTheme.get_font('body'),
+        #         fg=GlassTheme.get_color('text_primary'), bg=GlassTheme.get_color('card_bg'),
+        #         anchor="w").pack(fill=tk.X, pady=(0, 8))
 
         # 日志文本区域容器
         log_container = tk.Frame(log_frame, bg=GlassTheme.get_color('card_bg'))
@@ -1650,12 +1646,6 @@ class BilibiliAudioExtractorGUI:
             if pulse_value > 100:
                 pulse_value = current_value
             self.progress_var.set(pulse_value)
-
-            # 状态文字闪烁
-            if self.status_var.get() == "处理中...":
-                self.status_label.config(fg=GlassTheme.get_color('primary'))
-            else:
-                self.status_label.config(fg=GlassTheme.get_color('text_secondary'))
 
             self.root.after(200, self._animate_pulse)
 
