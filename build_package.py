@@ -521,6 +521,8 @@ Type: dirifempty; Name: "{{app}}"
             return False
 
         return True
+
+    def cleanup(self):
         """清理临时文件"""
         print("\n清理临时文件...")
         temp_dir = self.build_dir / "temp"
