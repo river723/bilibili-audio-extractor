@@ -388,7 +388,139 @@ A: 在设置的输出目录中，文件名基于视频标题
         print(f"[OK] 安装包创建完成: {zip_name}")
         return True
 
-    def cleanup(self):
+    def create_inno_script(self):
+        """生成Inno Setup配置脚本"""
+        print("\n生成Inno Setup脚本...")
+
+        # Inno Setup脚本内容
+        iss_content = f"""[Setup]
+AppName={self.app_name}
+AppVersion={self.version}
+AppPublisher=Audio Extractor
+AppSupportURL=https://github.com/river723/bilibili-audio-extractor
+DefaultDirName={{autopf}}\\{self.app_name}
+DefaultGroupName={self.app_name}
+AllowNoIcons=yes
+LicenseFile=
+InfoBeforeFile=
+OutputDir={self.output_dir}
+OutputBaseFilename={self.app_name}_Setup
+Compression=lzma
+SolidCompression=yes
+WizardStyle=modern
+ShowLanguageDialog=no
+LanguageDetectionMethod=uilanguage
+UsePreviousLanguage=no
+ShowUndisplayableLanguages=no
+
+[Languages]
+Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"; Flags: unchecked
+
+[Files]
+Source: "{self.build_dir}\\B站音频提取器.exe"; DestDir: "{{app}}"; Flags: ignoreversion
+Source: "{self.build_dir}\\you-get\\*"; DestDir: "{{app}}\\you-get"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{self.build_dir}\\使用说明.txt"; DestDir: "{{app}}"; Flags: ignoreversion
+
+[Icons]
+Name: "{{group}}\\{self.app_name}"; Filename: "{{app}}\\B站音频提取器.exe"
+Name: "{{group}}\\{{cm:UninstallProgram,{self.app_name}}}"; Filename: "{{uninstallexe}}"
+Name: "{{autodesktop}}\\{self.app_name}"; Filename: "{{app}}\\B站音频提取器.exe"; Tasks: desktopicon
+
+[Run]
+Filename: "{{app}}\\B站音频提取器.exe"; Description: "{{cm:LaunchProgram,{self.app_name}}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: dirifempty; Name: "{{app}}\\you-get"
+Type: dirifempty; Name: "{{app}}"
+"""
+
+        # 保存.iss脚本
+        iss_path = self.build_dir / "setup.iss"
+        with open(iss_path, 'w', encoding='utf-8') as f:
+            f.write(iss_content)
+
+        print(f"[OK] Inno Setup脚本生成: {iss_path}")
+        return True
+
+    def compile_inno_installer(self):
+        """使用ISCC编译Inno Setup脚本"""
+        print("\n编译Inno Setup安装程序...")
+
+        # 尝试多个可能的ISCC位置
+        possible_paths = [
+            Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
+            Path("C:/Program Files/Inno Setup 6/ISCC.exe"),
+            Path("C:/Program Files (x86)/Inno Setup 5/ISCC.exe"),
+            Path("C:/Program Files/Inno Setup 5/ISCC.exe"),
+        ]
+
+        iscc_path = None
+        for path in possible_paths:
+            if path.exists():
+                iscc_path = path
+                break
+
+        if iscc_path is None:
+            print("[WARNING] ISCC.exe未找到，跳过Inno Setup编译")
+            print("[提示] 请从 https://jrsoftware.org/isinfo.php 下载安装Inno Setup")
+            return False
+
+        try:
+            iss_file = self.build_dir / "setup.iss"
+            result = subprocess.run(
+                [str(iscc_path), str(iss_file)],
+                capture_output=True,
+                text=True,
+                cwd=str(self.project_dir)
+            )
+
+            if result.returncode == 0:
+                print("[OK] Inno Setup安装程序编译成功")
+                setup_exe = self.output_dir / f"{self.app_name}_Setup.exe"
+                if setup_exe.exists():
+                    print(f"[OK] 生成安装程序: {setup_exe}")
+                    return True
+                else:
+                    print("[ERROR] 安装程序文件未找到")
+                    return False
+            else:
+                print(f"[ERROR] 编译失败: {result.stderr}")
+                return False
+
+        except Exception as e:
+            print(f"[ERROR] 编译异常: {e}")
+            return False
+
+    def create_inno_setup_installer(self):
+        """创建Inno Setup安装程序（完整流程）"""
+        print("\n[*] 创建Inno Setup安装程序...")
+
+        # 检查是否有ISCC
+        possible_paths = [
+            Path("C:/Program Files (x86)/Inno Setup 6/ISCC.exe"),
+            Path("C:/Program Files/Inno Setup 6/ISCC.exe"),
+            Path("C:/Program Files (x86)/Inno Setup 5/ISCC.exe"),
+            Path("C:/Program Files/Inno Setup 5/ISCC.exe"),
+        ]
+
+        iscc_exists = any(path.exists() for path in possible_paths)
+
+        if not iscc_exists:
+            print("[INFO] 跳过Inno Setup编译（ISCC未安装）")
+            print("[建议] 从 https://jrsoftware.org/isinfo.php 下载安装Inno Setup，然后重新运行")
+            return True  # 不影响整体打包流程
+
+        # 执行Inno Setup流程
+        if not self.create_inno_script():
+            return False
+
+        if not self.compile_inno_installer():
+            return False
+
+        return True
         """清理临时文件"""
         print("\n清理临时文件...")
         temp_dir = self.build_dir / "temp"
@@ -426,9 +558,9 @@ A: 在设置的输出目录中，文件名基于视频标题
         steps = [
             ("创建可执行文件", self.create_exe),
             ("创建you-get捆绑包", self.create_youget_bundle),
-            ("跳过启动脚本创建", self.create_launch_script),
             ("创建说明文档", self.create_readme),
-            ("创建安装包", self.create_package)
+            ("创建ZIP安装包", self.create_package),
+            ("创建Inno Setup安装程序", self.create_inno_setup_installer),
         ]
 
         for name, func in steps:
