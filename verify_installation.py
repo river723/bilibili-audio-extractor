@@ -14,14 +14,25 @@ from pathlib import Path
 
 def print_status(message, status_type="info"):
     """打印状态消息"""
-    if status_type == "success":
-        print(f"✓ {message}")
-    elif status_type == "error":
-        print(f"✗ {message}")
-    elif status_type == "warning":
-        print(f"⚠ {message}")
-    else:
-        print(f"ℹ {message}")
+    try:
+        if status_type == "success":
+            print(f"✓ {message}")
+        elif status_type == "error":
+            print(f"✗ {message}")
+        elif status_type == "warning":
+            print(f"⚠ {message}")
+        else:
+            print(f"ℹ {message}")
+    except UnicodeEncodeError:
+        # Fallback for Windows encoding issues
+        if status_type == "success":
+            print(f"SUCCESS: {message}")
+        elif status_type == "error":
+            print(f"ERROR: {message}")
+        elif status_type == "warning":
+            print(f"WARNING: {message}")
+        else:
+            print(f"INFO: {message}")
 
 def test_unified_installer():
     """测试统一安装器"""
@@ -107,18 +118,23 @@ def main():
     print_status("测试结果摘要", "info")
     print("=" * 60)
 
-    print(f"\n统一安装器: {'✓ 正常' if install_success else '✗ 失败'}")
-    print(f"qrcode功能: {'✓ 正常' if qrcode_success else '⚠ 未安装'}")
-    print(f"Pillow功能: {'✓ 正常' if pillow_success else '⚠ 未安装'}")
+    try:
+        print(f"\n统一安装器: {'✓ 正常' if install_success else '✗ 失败'}")
+        print(f"qrcode功能: {'✓ 正常' if qrcode_success else '⚠ 未安装'}")
+        print(f"Pillow功能: {'✓ 正常' if pillow_success else '⚠ 未安装'}")
+    except UnicodeEncodeError:
+        print(f"\n统一安装器: {'正常' if install_success else '失败'}")
+        print(f"qrcode功能: {'正常' if qrcode_success else '未安装'}")
+        print(f"Pillow功能: {'正常' if pillow_success else '未安装'}")
 
     if install_success and qrcode_success and pillow_success:
-        print_status("\n🎉 所有测试通过！统一安装方案工作正常", "success")
+        print_status("\n所有测试通过！统一安装方案工作正常", "success")
         print("\n您现在可以：")
         print("1. 运行: python gui_extractor_simple.py")
         print("2. 或打包: 一键打包.bat")
         return True
     else:
-        print_status("\n⚠ 部分测试未通过，但程序仍能正常运行", "warning")
+        print_status("\n部分测试未通过，但程序仍能正常运行", "warning")
         print("\n功能说明:")
         if not qrcode_success:
             print("- 将使用外部API生成二维码（需要网络）")

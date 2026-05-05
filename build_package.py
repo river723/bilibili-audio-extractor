@@ -34,16 +34,29 @@ class UnifiedInstaller:
 
     def print_status(self, message, status_type="info"):
         """打印状态消息"""
-        if status_type == "info":
-            print(f"ℹ {message}")
-        elif status_type == "success":
-            print(f"✓ {message}")
-        elif status_type == "warning":
-            print(f"⚠ {message}")
-        elif status_type == "error":
-            print(f"✗ {message}")
-        else:
-            print(message)
+        try:
+            if status_type == "info":
+                print(f"ℹ {message}")
+            elif status_type == "success":
+                print(f"✓ {message}")
+            elif status_type == "warning":
+                print(f"⚠ {message}")
+            elif status_type == "error":
+                print(f"✗ {message}")
+            else:
+                print(message)
+        except UnicodeEncodeError:
+            # Fallback for Windows encoding issues
+            if status_type == "info":
+                print(f"INFO: {message}")
+            elif status_type == "success":
+                print(f"SUCCESS: {message}")
+            elif status_type == "warning":
+                print(f"WARNING: {message}")
+            elif status_type == "error":
+                print(f"ERROR: {message}")
+            else:
+                print(message)
 
     def run_command(self, cmd, timeout=120):
         """运行命令并返回结果"""
@@ -172,14 +185,24 @@ class UnifiedInstaller:
         print("="*60)
 
         print("\n依赖安装状态:")
-        for package, success in install_results.items():
-            status = "✓ 已安装" if success else "⚠ 安装失败"
-            print(f"  - {package}: {status}")
+        try:
+            for package, success in install_results.items():
+                status = "✓ 已安装" if success else "⚠ 安装失败"
+                print(f"  - {package}: {status}")
 
-        print("\n功能验证状态:")
-        for lib, success in verification_results.items():
-            status = "✓ 正常" if success else "⚠ 异常"
-            print(f"  - {lib}: {status}")
+            print("\n功能验证状态:")
+            for lib, success in verification_results.items():
+                status = "✓ 正常" if success else "⚠ 异常"
+                print(f"  - {lib}: {status}")
+        except UnicodeEncodeError:
+            for package, success in install_results.items():
+                status = "已安装" if success else "安装失败"
+                print(f"  - {package}: {status}")
+
+            print("\n功能验证状态:")
+            for lib, success in verification_results.items():
+                status = "正常" if success else "异常"
+                print(f"  - {lib}: {status}")
 
         print("\n功能说明:")
         if verification_results.get("qrcode", False):
